@@ -7,6 +7,14 @@ import (
 	"os"
 	"sort"
 	"strings"
+
+	"bitbucket.org/snapbug/hsr/common/regexp"
+)
+
+var (
+	gameVersion      = regexp.New(`gameVersion = (?P<version>\d+)`)
+	screenTransition = regexp.New(`OnSceneLoaded\(\) - prevMode=(?P<prev>\S+) currMode=(?P<curr>\S+)`)
+	gameServer       = regexp.New(`GotoGameServer -- address=(?P<ip>.+):(?P<port>\d+), game=(?P<game>\d+), client=(?P<client>\d+), spectateKey=(?P<key>.+)`)
 )
 
 type FileAndLine struct {
@@ -48,9 +56,46 @@ func main() {
 		}
 	}
 
+	var out *os.File
+	var version string
+	var gameType string
+	var err error
+
 	for logsandlines.Len() > 0 {
+		// sort the lines -- should really do something else, when one wraps around it'll screw this up!
 		sort.Sort(logsandlines)
-		fmt.Printf("%s\n", logsandlines[0].scn.Text())
+		text := logsandlines[0].scn.Text()
+
+		if gameVersion.MatchString(text) {
+			version = text
+			fmt.Printf("Found game version in: %s\n", version)
+		}
+
+		if screenTransition.MatchString(text) {
+			trans := screenTransition.NamedMatches(text)
+			gameType = trans["curr"]
+		}
+
+		if gameServer.MatchString(text) {
+			gs := gameServer.NamedMatches(text)
+			fmt.Printf("%s Game: %s/%s/%s @ %s:%s\n", gameType, gs["game"], gs["client"], gs["key"], gs["ip"], gs["key"])
+
+			if out != nil {
+				if err = out.Close(); err != nil {
+					panic(err)
+				}
+			}
+			out, err = os.Create(fmt.Sprintf("out/%s.%s.%s.(%s).log", gs["client"], gs["client"], gs["key"], gameType))
+			if err != nil {
+				panic(err)
+			}
+			fmt.Fprintf(out, "%s\n", version)
+		}
+
+		if out != nil {
+			fmt.Fprintf(out, "%s\n", text)
+		}
+
 		if !logsandlines[0].Update() {
 			logsandlines = logsandlines[1:]
 		}
