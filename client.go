@@ -85,7 +85,7 @@ func main() {
 					panic(err)
 				}
 			}
-			out, err = os.Create(fmt.Sprintf("out/%s.%s.%s.(%s).log", gs["client"], gs["client"], gs["key"], gameType))
+			out, err = os.Create(fmt.Sprintf("out/%s.%s.%s.(%s).log", gs["client"], gs["game"], gs["key"], gameType))
 			if err != nil {
 				panic(err)
 			}
