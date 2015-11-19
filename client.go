@@ -90,10 +90,11 @@ func main() {
 				panic(err)
 			}
 			fmt.Fprintf(out, "%s\n", version)
-		}
-
-		if out != nil {
 			fmt.Fprintf(out, "%s\n", text)
+		} else {
+			if out != nil && strings.Contains(text, "GameState") {
+				fmt.Fprintf(out, "%s\n", text)
+			}
 		}
 
 		if !logsandlines[0].Update() {
