@@ -2,8 +2,12 @@ package main
 
 import (
 	"bufio"
+	"bytes"
+	"compress/gzip"
+	"encoding/gob"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"sort"
 	"strings"
@@ -37,6 +41,47 @@ func (fl FileAndLines) Len() int           { return len(fl) }
 func (fl FileAndLines) Swap(i, j int)      { fl[i], fl[j] = fl[j], fl[i] }
 func (fl FileAndLines) Less(i, j int) bool { return strings.Compare(fl[i].ts, fl[j].ts) < 0 }
 
+type Log struct {
+	Type     string
+	Version  string
+	Uploader string
+	Key      string
+	Data     []byte
+
+	data bytes.Buffer
+}
+
+const (
+	url = "http://192.168.99.100:8080"
+)
+
+func upload(l Log) {
+	var y bytes.Buffer
+
+	gz := gzip.NewWriter(&y)
+	gz.Write(l.data.Bytes())
+	gz.Close()
+	l.Data = y.Bytes()
+
+	var x bytes.Buffer
+	enc := gob.NewEncoder(&x)
+	err := enc.Encode(l)
+
+	if err != nil {
+		panic(err)
+	}
+
+	resp, err := http.Post(fmt.Sprintf("%s/g/%s/%s/", url, l.Uploader, l.Key), "appliation/octet-stream", &x)
+
+	if err != nil {
+		fmt.Println(err)
+	} else {
+		fmt.Printf("Uploaded: %s/%s\n", l.Uploader, l.Key)
+		fmt.Printf("%s\n", resp)
+	}
+	panic("") // only upload 1 ... mmmm
+}
+
 func main() {
 	flag.Parse()
 
@@ -56,10 +101,15 @@ func main() {
 		}
 	}
 
-	var out *os.File
+	var dbgout *os.File
+	var err error
+
+	var versionLine string
 	var version string
 	var gameType string
-	var err error
+
+	var shupload bool
+	var log Log
 
 	for logsandlines.Len() > 0 {
 		// sort the lines -- should really do something else, when one wraps around it'll screw this up!
@@ -67,7 +117,9 @@ func main() {
 		text := logsandlines[0].scn.Text()
 
 		if gameVersion.MatchString(text) {
-			version = text
+			p := gameVersion.NamedMatches(text)
+			version = p["version"]
+			versionLine = text
 			fmt.Printf("Found game version in: %s\n", version)
 		}
 
@@ -80,25 +132,48 @@ func main() {
 			gs := gameServer.NamedMatches(text)
 			fmt.Printf("%s Game: %s/%s/%s @ %s:%s\n", gameType, gs["game"], gs["client"], gs["key"], gs["ip"], gs["key"])
 
-			if out != nil {
-				if err = out.Close(); err != nil {
+			if shupload {
+				upload(log)
+			}
+			log = Log{
+				Type:     gameType,
+				Uploader: gs["client"],
+				Key:      fmt.Sprintf("%s-%s", gs["game"], gs["key"]),
+				Version:  version,
+			}
+			shupload = true
+
+			if dbgout != nil {
+				if err = dbgout.Close(); err != nil {
 					panic(err)
 				}
 			}
-			out, err = os.Create(fmt.Sprintf("out/%s.%s.%s.(%s).log", gs["client"], gs["game"], gs["key"], gameType))
+			dbgout, err = os.Create(fmt.Sprintf("out/%s.%s.%s.(%s).log", gs["client"], gs["game"], gs["key"], gameType))
 			if err != nil {
 				panic(err)
 			}
-			fmt.Fprintf(out, "%s\n", version)
-			fmt.Fprintf(out, "%s\n", text)
+			fmt.Fprintf(dbgout, "%s\n", versionLine)
+			fmt.Fprintf(dbgout, "%s\n", text)
+
+			log.data.Write([]byte(versionLine))
+			log.data.Write([]byte("\n"))
+			log.data.Write([]byte(text))
+			log.data.Write([]byte("\n"))
 		} else {
-			if out != nil && strings.Contains(text, "GameState") {
-				fmt.Fprintf(out, "%s\n", text)
+			if dbgout != nil && strings.Contains(text, "GameState") {
+				fmt.Fprintf(dbgout, "%s\n", text)
+
+				log.data.Write([]byte(text))
+				log.data.Write([]byte("\n"))
 			}
 		}
 
 		if !logsandlines[0].Update() {
 			logsandlines = logsandlines[1:]
 		}
+	}
+
+	if shupload {
+		upload(log)
 	}
 }
