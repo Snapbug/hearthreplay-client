@@ -79,7 +79,6 @@ func upload(l Log) {
 		fmt.Printf("Uploaded: %s/%s\n", l.Uploader, l.Key)
 		fmt.Printf("%s\n", resp)
 	}
-	panic("") // only upload 1 ... mmmm
 }
 
 func main() {
