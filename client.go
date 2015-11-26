@@ -29,7 +29,12 @@ type FileAndLine struct {
 
 func (fl *FileAndLine) Update() bool {
 	if fl.scn.Scan() {
+		old_text := fl.ts
 		fl.ts = strings.Split(fl.scn.Text(), " ")[1]
+
+		if fl.ts < old_text {
+			fl.ts = "E" + fl.ts // dirty cheat to get around the time stuff!
+		}
 		return true
 	}
 	return false
@@ -74,10 +79,11 @@ func upload(l Log) {
 	resp, err := http.Post(fmt.Sprintf("%s/g/%s/%s/", url, l.Uploader, l.Key), "appliation/octet-stream", &x)
 
 	if err != nil {
-		fmt.Println(err)
+		fmt.Printf("Error contacting server: %s\n", err)
+	} else if resp.StatusCode != http.StatusAccepted {
+		fmt.Printf("Server returned: %s -- report %s/%s", l.Uploader, l.Key)
 	} else {
-		fmt.Printf("Uploaded: %s/%s\n", l.Uploader, l.Key)
-		fmt.Printf("%s\n", resp)
+		fmt.Printf("Uploaded %s game: %s/g/%s/%s\n", l.Type, url, l.Uploader, l.Key)
 	}
 }
 
@@ -107,7 +113,7 @@ func main() {
 	var version string
 	var gameType string
 
-	var shupload bool
+	var should_upload bool
 	var log Log
 
 	for logsandlines.Len() > 0 {
@@ -131,8 +137,8 @@ func main() {
 			gs := gameServer.NamedMatches(text)
 			fmt.Printf("%s Game: %s/%s/%s @ %s:%s\n", gameType, gs["game"], gs["client"], gs["key"], gs["ip"], gs["key"])
 
-			if shupload {
-				upload(log)
+			if should_upload {
+				go upload(log)
 			}
 			log = Log{
 				Type:     gameType,
@@ -140,7 +146,7 @@ func main() {
 				Key:      fmt.Sprintf("%s-%s", gs["game"], gs["key"]),
 				Version:  version,
 			}
-			shupload = true
+			should_upload = true
 
 			if dbgout != nil {
 				if err = dbgout.Close(); err != nil {
@@ -172,7 +178,7 @@ func main() {
 		}
 	}
 
-	if shupload {
-		upload(log)
+	if should_upload {
+		go upload(log)
 	}
 }
