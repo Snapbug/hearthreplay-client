@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"compress/gzip"
+	"crypto/tls"
 	"encoding/gob"
 	"flag"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 
 	"bitbucket.org/snapbug/hsr/common/regexp"
 )
@@ -57,10 +59,31 @@ type Log struct {
 }
 
 const (
-	url = "http://192.168.99.100:8080"
+	url = "https://192.168.99.100:8080"
 )
 
-func upload(l Log) {
+var (
+	tr = &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	client = &http.Client{Transport: tr}
+)
+
+func upload(l Log, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	path := fmt.Sprintf("%s/g/%s/%s/", url, l.Uploader, l.Key)
+	resp, err := client.Head(path)
+
+	if err != nil {
+		fmt.Printf("head failed: %#v\n", err)
+	} else if resp.StatusCode == http.StatusOK {
+		fmt.Printf("Already uploaded %s/%s -- skipping\n", l.Uploader, l.Key)
+		return
+	} else {
+		fmt.Printf("head failed: %#v\n", resp)
+	}
+
 	var y bytes.Buffer
 
 	gz := gzip.NewWriter(&y)
@@ -70,13 +93,13 @@ func upload(l Log) {
 
 	var x bytes.Buffer
 	enc := gob.NewEncoder(&x)
-	err := enc.Encode(l)
+	err = enc.Encode(l)
 
 	if err != nil {
 		panic(err)
 	}
 
-	resp, err := http.Post(fmt.Sprintf("%s/g/%s/%s/", url, l.Uploader, l.Key), "appliation/octet-stream", &x)
+	resp, err = client.Post(path, "appliation/octet-stream", &x)
 
 	if err != nil {
 		fmt.Printf("Error contacting server: %s\n", err)
@@ -89,6 +112,7 @@ func upload(l Log) {
 
 func main() {
 	flag.Parse()
+	var wg sync.WaitGroup
 
 	logsandlines := make(FileAndLines, flag.NArg())
 	added := 0
@@ -138,7 +162,8 @@ func main() {
 			fmt.Printf("%s Game: %s/%s/%s @ %s:%s\n", gameType, gs["game"], gs["client"], gs["key"], gs["ip"], gs["key"])
 
 			if should_upload {
-				go upload(log)
+				wg.Add(1)
+				go upload(log, &wg)
 			}
 			log = Log{
 				Type:     gameType,
@@ -179,6 +204,10 @@ func main() {
 	}
 
 	if should_upload {
-		go upload(log)
+		wg.Add(1)
+		go upload(log, &wg)
 	}
+
+	wg.Wait()
+	fmt.Println("---")
 }
