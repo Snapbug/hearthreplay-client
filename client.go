@@ -59,7 +59,7 @@ type Log struct {
 }
 
 const (
-	url = "https://192.168.99.100:8080"
+	url = "https://hearthreplay.com"
 )
 
 var (
