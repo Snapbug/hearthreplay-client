@@ -310,8 +310,8 @@ func main() {
 	for log := range getLogs(flag.Args()) {
 		wg.Add(1)
 
-		fmt.Printf("%s/%s\n", log.Uploader, log.Key)
-		fmt.Printf("\t%s v %s\n\n", log.p1, log.p2)
+		fmt.Printf("%s game: %s/g/%s/%s/\n", strings.Title(strings.ToLower(log.Type)), url, log.Uploader, log.Key)
+		fmt.Printf("\t%s vs. %s\n\n", log.p1, log.p2)
 
 		if false {
 			go upload(log, &wg)
