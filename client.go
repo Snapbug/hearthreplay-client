@@ -21,6 +21,14 @@ var (
 	gameVersion      = regexp.New(`gameVersion = (?P<version>\d+)`)
 	screenTransition = regexp.New(`OnSceneLoaded\(\) - prevMode=(?P<prev>\S+) currMode=(?P<curr>\S+)`)
 	gameServer       = regexp.New(`GotoGameServer -- address=(?P<ip>.+):(?P<port>\d+), game=(?P<game>\d+), client=(?P<client>\d+), spectateKey=(?P<key>.+)`)
+
+	player = regexp.New(`GameState[^_]+TAG_CHANGE Entity=(?P<name>.+) tag=PLAYSTATE value=PLAYING`)
+	first  = regexp.New(`GameState[^_]+TAG_CHANGE Entity=(?P<name>.+) tag=FIRST_PLAYER value=1`)
+	hent   = regexp.New(`GameState[^_]+TAG_CHANGE Entity=(?P<name>.+) tag=HERO_ENTITY value=(?P<hid>\d+)`)
+	winner = regexp.New(`GameState[^_]+TAG_CHANGE Entity=(?P<name>.+) tag=PLAYSTATE value=WON`)
+
+	hero   = regexp.New(`GameState[^_]+tag=HERO_ENTITY value=(?P<id>\d+)`)
+	create = regexp.New(` - FULL_ENTITY - Creating ID=(?P<id>\d+) CardID=(?P<cid>.*)`)
 )
 
 type FileAndLine struct {
@@ -35,7 +43,7 @@ func (fl *FileAndLine) Update() bool {
 		fl.ts = strings.Split(fl.scn.Text(), " ")[1]
 
 		if fl.ts < old_text {
-			fl.ts = "E" + fl.ts // dirty cheat to get around the time stuff!
+			fl.ts = "D" + fl.ts // dirty cheat to get around the time stuff!
 		}
 		return true
 	}
@@ -48,12 +56,32 @@ func (fl FileAndLines) Len() int           { return len(fl) }
 func (fl FileAndLines) Swap(i, j int)      { fl[i], fl[j] = fl[j], fl[i] }
 func (fl FileAndLines) Less(i, j int) bool { return strings.Compare(fl[i].ts, fl[j].ts) < 0 }
 
+type Player struct {
+	Name   string
+	Class  string
+	Winner bool
+	First  bool
+	Hero   string
+}
+
+func (p Player) String() string {
+	w := "✔ "
+	if !p.Winner {
+		w = "" // w = "✘"
+	}
+	return fmt.Sprintf("%s%s (%s)", w, p.Name, p.Hero)
+}
+
 type Log struct {
 	Type     string
 	Version  string
 	Uploader string
 	Key      string
 	Data     []byte
+
+	p1, p2    Player
+	heros     []string
+	heros_cid [2]string
 
 	data bytes.Buffer
 }
@@ -110,104 +138,187 @@ func upload(l Log, wg *sync.WaitGroup) {
 	}
 }
 
-func main() {
-	flag.Parse()
-	var wg sync.WaitGroup
+var (
+	debug string
+)
 
-	logsandlines := make(FileAndLines, flag.NArg())
-	added := 0
+func getLogs(filenames []string) chan Log {
+	x := make(chan Log)
+	go func(filenames []string) {
+		var dbgout *os.File
+		var err error
 
-	for _, fn := range flag.Args() {
-		f, err := os.Open(fn)
-		if err != nil {
-			panic(err)
-		} else {
-			fandl := &FileAndLine{scn: bufio.NewScanner(f), fn: fn}
-			if fandl.Update() {
-				logsandlines[added] = fandl
-				added++
-			}
-		}
-	}
+		var versionLine string
+		var version string
+		var gameType string
+		var gameTypeLine string
 
-	var dbgout *os.File
-	var err error
+		var log Log
+		var found_log bool
 
-	var versionLine string
-	var version string
-	var gameType string
+		logsandlines := make(FileAndLines, 0)
 
-	var should_upload bool
-	var log Log
-
-	for logsandlines.Len() > 0 {
-		// sort the lines -- should really do something else, when one wraps around it'll screw this up!
-		sort.Sort(logsandlines)
-		text := logsandlines[0].scn.Text()
-
-		if gameVersion.MatchString(text) {
-			p := gameVersion.NamedMatches(text)
-			version = p["version"]
-			versionLine = text
-			fmt.Printf("Found game version in: %s\n", version)
-		}
-
-		if screenTransition.MatchString(text) {
-			trans := screenTransition.NamedMatches(text)
-			gameType = trans["curr"]
-		}
-
-		if gameServer.MatchString(text) {
-			gs := gameServer.NamedMatches(text)
-			fmt.Printf("%s Game: %s/%s/%s @ %s:%s\n", gameType, gs["game"], gs["client"], gs["key"], gs["ip"], gs["key"])
-
-			if should_upload {
-				wg.Add(1)
-				go upload(log, &wg)
-			}
-			log = Log{
-				Type:     gameType,
-				Uploader: gs["client"],
-				Key:      fmt.Sprintf("%s-%s", gs["game"], gs["key"]),
-				Version:  version,
-			}
-			should_upload = true
-
-			if dbgout != nil {
-				if err = dbgout.Close(); err != nil {
-					panic(err)
-				}
-			}
-			dbgout, err = os.Create(fmt.Sprintf("out/%s.%s.%s.(%s).log", gs["client"], gs["game"], gs["key"], gameType))
+		for _, fn := range filenames {
+			f, err := os.Open(fn)
 			if err != nil {
 				panic(err)
-			}
-			fmt.Fprintf(dbgout, "%s\n", versionLine)
-			fmt.Fprintf(dbgout, "%s\n", text)
-
-			log.data.Write([]byte(versionLine))
-			log.data.Write([]byte("\n"))
-			log.data.Write([]byte(text))
-			log.data.Write([]byte("\n"))
-		} else {
-			if dbgout != nil && strings.Contains(text, "GameState") {
-				fmt.Fprintf(dbgout, "%s\n", text)
-
-				log.data.Write([]byte(text))
-				log.data.Write([]byte("\n"))
+			} else {
+				fandl := &FileAndLine{scn: bufio.NewScanner(f), fn: fn}
+				if fandl.Update() {
+					logsandlines = append(logsandlines, fandl)
+				}
 			}
 		}
 
-		if !logsandlines[0].Update() {
-			logsandlines = logsandlines[1:]
-		}
-	}
+		for logsandlines.Len() > 0 {
+			sort.Sort(logsandlines)
+			text := logsandlines[0].scn.Text()
 
-	if should_upload {
+			if gameVersion.MatchString(text) {
+				p := gameVersion.NamedMatches(text)
+				version = p["version"]
+				versionLine = text
+			}
+			if screenTransition.MatchString(text) {
+				trans := screenTransition.NamedMatches(text)
+				gameTypeLine = text
+				gameType = trans["curr"]
+			}
+			if player.MatchString(text) {
+				parts := player.NamedMatches(text)
+				if log.p1.Name == "" {
+					log.p1.Name = parts["name"]
+				} else {
+					log.p2.Name = parts["name"]
+				}
+			}
+			if first.MatchString(text) {
+				parts := first.NamedMatches(text)
+				if log.p1.Name == parts["name"] {
+					log.p1.First = true
+				} else {
+					log.p2.First = true
+				}
+			}
+			if hent.MatchString(text) {
+				parts := hent.NamedMatches(text)
+				if log.p1.Name == parts["name"] {
+					log.p1.Hero = parts["hid"]
+				} else {
+					log.p2.Hero = parts["hid"]
+				}
+			}
+			if hero.MatchString(text) {
+				p := hero.NamedMatches(text)
+				log.heros = append(log.heros, p["id"])
+			}
+			if create.MatchString(text) {
+				p := create.NamedMatches(text)
+				if p["id"] == log.heros[0] {
+					log.heros_cid[0] = p["cid"]
+				} else if p["id"] == log.heros[1] {
+					log.heros_cid[1] = p["cid"]
+				}
+			}
+			if winner.MatchString(text) {
+				p := winner.NamedMatches(text)
+				if log.p1.Name == p["name"] {
+					log.p1.Winner = true
+				} else {
+					log.p2.Winner = true
+				}
+			}
+
+			if gameServer.MatchString(text) {
+				gs := gameServer.NamedMatches(text)
+
+				if found_log {
+					if log.p1.Hero == log.heros[0] {
+						log.p1.Hero = log.heros_cid[0]
+						log.p2.Hero = log.heros_cid[1]
+					} else if log.p1.Hero == log.heros[1] {
+						log.p1.Hero = log.heros_cid[1]
+						log.p2.Hero = log.heros_cid[0]
+					} else {
+						fmt.Println("Unable to determine hero classes")
+					}
+					x <- log
+				}
+
+				log = Log{
+					Type:     gameType,
+					Uploader: gs["client"],
+					Key:      fmt.Sprintf("%s-%s", gs["game"], gs["key"]),
+					Version:  version,
+				}
+				found_log = true
+
+				if debug != "" && dbgout != nil {
+					if err = dbgout.Close(); err != nil {
+						panic(err)
+					}
+				}
+				if debug != "" {
+					dbgout, err = os.Create(fmt.Sprintf("out/%s.%s.%s.(%s).log", gs["client"], gs["game"], gs["key"], gameType))
+					if err != nil {
+						panic(err)
+					}
+					fmt.Fprintf(dbgout, "%s\n", versionLine)
+					fmt.Fprintf(dbgout, "%s\n", gameTypeLine)
+					fmt.Fprintf(dbgout, "%s\n", text)
+				}
+
+				log.data.WriteString(fmt.Sprintf("%s\n", versionLine))
+				log.data.WriteString(fmt.Sprintf("%s\n", gameTypeLine))
+				log.data.WriteString(fmt.Sprintf("%s\n", text))
+			} else {
+				if strings.Contains(text, "GameState") {
+					if debug != "" && dbgout != nil {
+						fmt.Fprintf(dbgout, "%s\n", text)
+					}
+					log.data.WriteString(fmt.Sprintf("%s\n", text))
+				}
+			}
+
+			if !logsandlines[0].Update() {
+				logsandlines = logsandlines[1:]
+			}
+		}
+
+		if found_log {
+			if log.p1.Hero == log.heros[0] {
+				log.p1.Hero = log.heros_cid[0]
+				log.p2.Hero = log.heros_cid[1]
+			} else if log.p1.Hero == log.heros[1] {
+				log.p1.Hero = log.heros_cid[1]
+				log.p2.Hero = log.heros_cid[0]
+			} else {
+				fmt.Println("Unable to determine hero classes")
+			}
+			x <- log
+		}
+
+		close(x)
+	}(filenames)
+	return x
+}
+
+func main() {
+	var wg sync.WaitGroup
+	flag.Parse()
+
+	for log := range getLogs(flag.Args()) {
 		wg.Add(1)
-		go upload(log, &wg)
-	}
 
+		fmt.Printf("%s game: %s/g/%s/%s/\n", strings.Title(strings.ToLower(log.Type)), url, log.Uploader, log.Key)
+		fmt.Printf("\t%s vs. %s\n\n", log.p1, log.p2)
+
+		if false {
+			go upload(log, &wg)
+		} else {
+			wg.Done()
+		}
+	}
 	wg.Wait()
-	fmt.Println("---")
+	fmt.Println("Fin!")
 }
