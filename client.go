@@ -6,13 +6,17 @@ import (
 	"compress/gzip"
 	"crypto/tls"
 	"encoding/gob"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"golang.org/x/net/websocket"
 	"net/http"
 	"os"
+	"os/exec"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"bitbucket.org/snapbug/hsr/common/regexp"
 )
@@ -32,18 +36,31 @@ var (
 )
 
 type FileAndLine struct {
-	ts  string
+	ts  time.Time
 	scn *bufio.Scanner
 	fn  string
+	add bool
 }
 
-func (fl *FileAndLine) Update() bool {
-	if fl.scn.Scan() {
-		old_text := fl.ts
-		fl.ts = strings.Split(fl.scn.Text(), " ")[1]
+const (
+	timeparse = "15:04:05.0000000"
+)
 
-		if fl.ts < old_text {
-			fl.ts = "D" + fl.ts // dirty cheat to get around the time stuff!
+func (fl *FileAndLine) Update() bool {
+	var err error
+	if fl.scn.Scan() {
+		old_time := fl.ts
+		fl.ts, err = time.Parse(timeparse, strings.Split(fl.scn.Text(), " ")[1])
+
+		if err != nil {
+			panic(fmt.Sprintf("error: %s\n", err))
+		}
+
+		if fl.ts.Before(old_time) {
+			fl.add = true
+		}
+		if fl.add {
+			fl.ts = fl.ts.Add(time.Duration(24) * time.Hour)
 		}
 		return true
 	}
@@ -54,11 +71,11 @@ type FileAndLines []*FileAndLine
 
 func (fl FileAndLines) Len() int           { return len(fl) }
 func (fl FileAndLines) Swap(i, j int)      { fl[i], fl[j] = fl[j], fl[i] }
-func (fl FileAndLines) Less(i, j int) bool { return strings.Compare(fl[i].ts, fl[j].ts) < 0 }
+func (fl FileAndLines) Less(i, j int) bool { return fl[i].ts.Before(fl[j].ts) }
 
 type Player struct {
-	Name   string
-	Class  string
+	Name string
+	// Class  string
 	Winner bool
 	First  bool
 	Hero   string
@@ -73,13 +90,17 @@ func (p Player) String() string {
 }
 
 type Log struct {
+	Start    time.Time
+	Finish   time.Time
+	Duration time.Duration
 	Type     string
 	Version  string
 	Uploader string
 	Key      string
-	Data     []byte
+	Data     []byte `json:"-"`
 
-	p1, p2    Player
+	P1        Player `json:"player1"`
+	P2        Player `json:"player2"`
 	heros     []string
 	heros_cid [2]string
 
@@ -186,26 +207,30 @@ func getLogs(filenames []string) chan Log {
 			}
 			if player.MatchString(text) {
 				parts := player.NamedMatches(text)
-				if log.p1.Name == "" {
-					log.p1.Name = parts["name"]
+				if log.P1.Name == "" {
+					log.P1.Name = parts["name"]
 				} else {
-					log.p2.Name = parts["name"]
+					log.P2.Name = parts["name"]
 				}
 			}
 			if first.MatchString(text) {
 				parts := first.NamedMatches(text)
-				if log.p1.Name == parts["name"] {
-					log.p1.First = true
+				if log.P1.Name == parts["name"] {
+					log.P1.First = true
 				} else {
-					log.p2.First = true
+					log.P2.First = true
 				}
 			}
 			if hent.MatchString(text) {
 				parts := hent.NamedMatches(text)
-				if log.p1.Name == parts["name"] {
-					log.p1.Hero = parts["hid"]
+				if log.P1.Name == parts["name"] {
+					if log.P1.Hero == "" {
+						log.P1.Hero = parts["hid"]
+					}
 				} else {
-					log.p2.Hero = parts["hid"]
+					if log.P2.Hero == "" {
+						log.P2.Hero = parts["hid"]
+					}
 				}
 			}
 			if hero.MatchString(text) {
@@ -222,23 +247,28 @@ func getLogs(filenames []string) chan Log {
 			}
 			if winner.MatchString(text) {
 				p := winner.NamedMatches(text)
-				if log.p1.Name == p["name"] {
-					log.p1.Winner = true
+				if log.P1.Name == p["name"] {
+					log.P1.Winner = true
 				} else {
-					log.p2.Winner = true
+					log.P2.Winner = true
 				}
+				log.Finish = logsandlines[0].ts
+				if logsandlines[0].ts.Before(log.Start) {
+					log.Finish = log.Finish.Add(time.Duration(24) * time.Hour)
+				}
+				log.Duration = log.Finish.Sub(log.Start)
 			}
 
 			if gameServer.MatchString(text) {
 				gs := gameServer.NamedMatches(text)
 
 				if found_log {
-					if log.p1.Hero == log.heros[0] {
-						log.p1.Hero = log.heros_cid[0]
-						log.p2.Hero = log.heros_cid[1]
-					} else if log.p1.Hero == log.heros[1] {
-						log.p1.Hero = log.heros_cid[1]
-						log.p2.Hero = log.heros_cid[0]
+					if log.P1.Hero == log.heros[0] {
+						log.P1.Hero = log.heros_cid[0]
+						log.P2.Hero = log.heros_cid[1]
+					} else if log.P1.Hero == log.heros[1] {
+						log.P1.Hero = log.heros_cid[1]
+						log.P2.Hero = log.heros_cid[0]
 					} else {
 						fmt.Println("Unable to determine hero classes")
 					}
@@ -246,6 +276,7 @@ func getLogs(filenames []string) chan Log {
 				}
 
 				log = Log{
+					Start:    logsandlines[0].ts,
 					Type:     gameType,
 					Uploader: gs["client"],
 					Key:      fmt.Sprintf("%s-%s", gs["game"], gs["key"]),
@@ -286,12 +317,12 @@ func getLogs(filenames []string) chan Log {
 		}
 
 		if found_log {
-			if log.p1.Hero == log.heros[0] {
-				log.p1.Hero = log.heros_cid[0]
-				log.p2.Hero = log.heros_cid[1]
-			} else if log.p1.Hero == log.heros[1] {
-				log.p1.Hero = log.heros_cid[1]
-				log.p2.Hero = log.heros_cid[0]
+			if log.P1.Hero == log.heros[0] {
+				log.P1.Hero = log.heros_cid[0]
+				log.P2.Hero = log.heros_cid[1]
+			} else if log.P1.Hero == log.heros[1] {
+				log.P1.Hero = log.heros_cid[1]
+				log.P2.Hero = log.heros_cid[0]
 			} else {
 				fmt.Println("Unable to determine hero classes")
 			}
@@ -303,22 +334,60 @@ func getLogs(filenames []string) chan Log {
 	return x
 }
 
+const (
+	index = `
+<html>
+	<head>
+		<meta charset="UTF-8" />
+		<script>
+			var serversocket = new WebSocket("ws://localhost:12345/echo");
+			serversocket.onmessage = function(e) {
+				var d = JSON.parse(e.data);
+
+				// document.getElementById('comms').innerHTML += "<pre>" + e.data + "</pre>";
+				document.getElementById('comms').innerHTML += "<h1>" + d.player1.Name + " vs. " + d.player2.Name + "</h1>";
+				document.getElementById('comms').innerHTML += "<a href='https://hearthreplay.com/g/" + d.Uploader + "/" + d.Key + "/'>view game</a><br />";
+			};
+		</script>
+	</head>
+	<body>
+		<div id='comms'></div>
+	</body>
+</html>
+`
+)
+
+func echoServer(logs chan Log) func(ws *websocket.Conn) {
+	return func(ws *websocket.Conn) {
+		for log := range logs {
+			d, _ := json.MarshalIndent(log, "", "\t")
+			fmt.Fprintf(ws, "%s", string(d))
+		}
+		os.Exit(0)
+	}
+}
+func root(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintln(w, index)
+}
+
 func main() {
-	var wg sync.WaitGroup
 	flag.Parse()
 
-	for log := range getLogs(flag.Args()) {
-		wg.Add(1)
+	http.Handle("/echo", websocket.Handler(echoServer(getLogs(flag.Args()))))
+	http.HandleFunc("/", root)
+	fmt.Println("listening")
 
-		fmt.Printf("%s game: %s/g/%s/%s/\n", strings.Title(strings.ToLower(log.Type)), url, log.Uploader, log.Key)
-		fmt.Printf("\t%s vs. %s\n\n", log.p1, log.p2)
-
-		if false {
-			go upload(log, &wg)
-		} else {
-			wg.Done()
+	go func() {
+		<-time.After(time.Duration(100) * time.Millisecond)
+		err := exec.Command("open", "http://localhost:12345").Run()
+		if err != nil {
+			fmt.Println(err)
 		}
+	}()
+
+	if err := http.ListenAndServe(":12345", nil); err != nil {
+		panic(err)
 	}
-	wg.Wait()
+
 	fmt.Println("Fin!")
 }
