@@ -21,6 +21,14 @@ var (
 	gameVersion      = regexp.New(`gameVersion = (?P<version>\d+)`)
 	screenTransition = regexp.New(`OnSceneLoaded\(\) - prevMode=(?P<prev>\S+) currMode=(?P<curr>\S+)`)
 	gameServer       = regexp.New(`GotoGameServer -- address=(?P<ip>.+):(?P<port>\d+), game=(?P<game>\d+), client=(?P<client>\d+), spectateKey=(?P<key>.+)`)
+
+	player = regexp.New(`GameState[^_]+TAG_CHANGE Entity=(?P<name>.+) tag=PLAYSTATE value=PLAYING`)
+	first  = regexp.New(`GameState[^_]+TAG_CHANGE Entity=(?P<name>.+) tag=FIRST_PLAYER value=1`)
+	hent   = regexp.New(`GameState[^_]+TAG_CHANGE Entity=(?P<name>.+) tag=HERO_ENTITY value=(?P<hid>\d+)`)
+	winner = regexp.New(`GameState[^_]+TAG_CHANGE Entity=(?P<name>.+) tag=PLAYSTATE value=WON`)
+
+	hero   = regexp.New(`GameState[^_]+tag=HERO_ENTITY value=(?P<id>\d+)`)
+	create = regexp.New(` - FULL_ENTITY - Creating ID=(?P<id>\d+) CardID=(?P<cid>.*)`)
 )
 
 type FileAndLine struct {
@@ -35,7 +43,7 @@ func (fl *FileAndLine) Update() bool {
 		fl.ts = strings.Split(fl.scn.Text(), " ")[1]
 
 		if fl.ts < old_text {
-			fl.ts = "E" + fl.ts // dirty cheat to get around the time stuff!
+			fl.ts = "D" + fl.ts // dirty cheat to get around the time stuff!
 		}
 		return true
 	}
@@ -48,12 +56,32 @@ func (fl FileAndLines) Len() int           { return len(fl) }
 func (fl FileAndLines) Swap(i, j int)      { fl[i], fl[j] = fl[j], fl[i] }
 func (fl FileAndLines) Less(i, j int) bool { return strings.Compare(fl[i].ts, fl[j].ts) < 0 }
 
+type Player struct {
+	Name   string
+	Class  string
+	Winner bool
+	First  bool
+	Hero   string
+}
+
+func (p Player) String() string {
+	w := "✔ "
+	if !p.Winner {
+		w = "" // w = "✘"
+	}
+	return fmt.Sprintf("%s%s (%s)", w, p.Name, p.Hero)
+}
+
 type Log struct {
 	Type     string
 	Version  string
 	Uploader string
 	Key      string
 	Data     []byte
+
+	p1, p2    Player
+	heros     []string
+	heros_cid [2]string
 
 	data bytes.Buffer
 }
@@ -151,20 +179,72 @@ func getLogs(filenames []string) chan Log {
 				version = p["version"]
 				versionLine = text
 			}
-
 			if screenTransition.MatchString(text) {
 				trans := screenTransition.NamedMatches(text)
 				gameTypeLine = text
 				gameType = trans["curr"]
 			}
+			if player.MatchString(text) {
+				parts := player.NamedMatches(text)
+				if log.p1.Name == "" {
+					log.p1.Name = parts["name"]
+				} else {
+					log.p2.Name = parts["name"]
+				}
+			}
+			if first.MatchString(text) {
+				parts := first.NamedMatches(text)
+				if log.p1.Name == parts["name"] {
+					log.p1.First = true
+				} else {
+					log.p2.First = true
+				}
+			}
+			if hent.MatchString(text) {
+				parts := hent.NamedMatches(text)
+				if log.p1.Name == parts["name"] {
+					log.p1.Hero = parts["hid"]
+				} else {
+					log.p2.Hero = parts["hid"]
+				}
+			}
+			if hero.MatchString(text) {
+				p := hero.NamedMatches(text)
+				log.heros = append(log.heros, p["id"])
+			}
+			if create.MatchString(text) {
+				p := create.NamedMatches(text)
+				if p["id"] == log.heros[0] {
+					log.heros_cid[0] = p["cid"]
+				} else if p["id"] == log.heros[1] {
+					log.heros_cid[1] = p["cid"]
+				}
+			}
+			if winner.MatchString(text) {
+				p := winner.NamedMatches(text)
+				if log.p1.Name == p["name"] {
+					log.p1.Winner = true
+				} else {
+					log.p2.Winner = true
+				}
+			}
 
 			if gameServer.MatchString(text) {
 				gs := gameServer.NamedMatches(text)
-				fmt.Printf("%s Game: %s/%s/%s @ %s:%s\n", gameType, gs["game"], gs["client"], gs["key"], gs["ip"], gs["key"])
 
 				if found_log {
+					if log.p1.Hero == log.heros[0] {
+						log.p1.Hero = log.heros_cid[0]
+						log.p2.Hero = log.heros_cid[1]
+					} else if log.p1.Hero == log.heros[1] {
+						log.p1.Hero = log.heros_cid[1]
+						log.p2.Hero = log.heros_cid[0]
+					} else {
+						fmt.Println("Unable to determine hero classes")
+					}
 					x <- log
 				}
+
 				log = Log{
 					Type:     gameType,
 					Uploader: gs["client"],
@@ -206,6 +286,15 @@ func getLogs(filenames []string) chan Log {
 		}
 
 		if found_log {
+			if log.p1.Hero == log.heros[0] {
+				log.p1.Hero = log.heros_cid[0]
+				log.p2.Hero = log.heros_cid[1]
+			} else if log.p1.Hero == log.heros[1] {
+				log.p1.Hero = log.heros_cid[1]
+				log.p2.Hero = log.heros_cid[0]
+			} else {
+				fmt.Println("Unable to determine hero classes")
+			}
 			x <- log
 		}
 
@@ -220,6 +309,10 @@ func main() {
 
 	for log := range getLogs(flag.Args()) {
 		wg.Add(1)
+
+		fmt.Printf("%s/%s\n", log.Uploader, log.Key)
+		fmt.Printf("\t%s v %s\n\n", log.p1, log.p2)
+
 		if false {
 			go upload(log, &wg)
 		} else {
