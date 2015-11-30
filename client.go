@@ -122,6 +122,7 @@ func upload(l Log, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	path := fmt.Sprintf("%s/g/%s/%s/", url, l.Uploader, l.Key)
+
 	resp, err := client.Head(path)
 
 	if err != nil {
@@ -359,10 +360,14 @@ const (
 
 func echoServer(logs chan Log) func(ws *websocket.Conn) {
 	return func(ws *websocket.Conn) {
+		var wg sync.WaitGroup
 		for log := range logs {
+			wg.Add(1)
+			upload(log, &wg)
 			d, _ := json.MarshalIndent(log, "", "\t")
 			fmt.Fprintf(ws, "%s", string(d))
 		}
+		wg.Wait()
 		os.Exit(0)
 	}
 }
