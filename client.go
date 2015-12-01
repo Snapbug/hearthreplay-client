@@ -6,7 +6,6 @@ import (
 	"compress/gzip"
 	"crypto/tls"
 	"encoding/gob"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"golang.org/x/net/websocket"
@@ -125,11 +124,6 @@ var (
 	client = &http.Client{Transport: tr}
 )
 
-func sendLogToWS(l Log, ws *websocket.Conn) {
-	d, _ := json.MarshalIndent(l, "", "\t")
-	fmt.Fprintf(ws, "%s", string(d))
-}
-
 func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 	defer wg.Done()
 
@@ -141,7 +135,7 @@ func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 		fmt.Printf("head failed: %#v\n", err)
 	} else if resp.StatusCode == http.StatusOK {
 		l.Status = "Skipped"
-		sendLogToWS(l, ws)
+		websocket.JSON.Send(ws, l)
 		fmt.Printf("Already uploaded %s/%s -- skipping\n", l.Uploader, l.Key)
 		return
 	} else {
@@ -175,7 +169,7 @@ func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 		l.Status = "Success"
 		fmt.Printf("Uploaded %s game: %s/g/%s/%s\n", l.Type, url, l.Uploader, l.Key)
 	}
-	sendLogToWS(l, ws)
+	websocket.JSON.Send(ws, l)
 }
 
 var (
@@ -413,7 +407,7 @@ func echoServer(logs chan Log) func(ws *websocket.Conn) {
 		for log := range logs {
 			wg.Add(1)
 			go upload(log, ws, &wg)
-			sendLogToWS(log, ws)
+			websocket.JSON.Send(ws, log)
 		}
 		wg.Wait()
 		os.Exit(1)
