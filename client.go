@@ -30,6 +30,8 @@ var (
 	first  = regexp.New(`GameState[^_]+TAG_CHANGE Entity=(?P<name>.+) tag=FIRST_PLAYER value=1`)
 	hent   = regexp.New(`GameState[^_]+TAG_CHANGE Entity=(?P<name>.+) tag=HERO_ENTITY value=(?P<hid>\d+)`)
 	winner = regexp.New(`GameState[^_]+TAG_CHANGE Entity=(?P<name>.+) tag=PLAYSTATE value=WON`)
+	id     = regexp.New(`GameState[^_]+TAG_CHANGE Entity=(?P<name>.+) tag=PLAYER_ID value=(?P<id>\d+)`)
+	local  = regexp.New(`SendChoices\(\) - id=(?P<id>\d+) ChoiceType=MULLIGAN`)
 
 	hero   = regexp.New(`GameState[^_]+tag=HERO_ENTITY value=(?P<id>\d+)`)
 	create = regexp.New(` - FULL_ENTITY - Creating ID=(?P<id>\d+) CardID=(?P<cid>.*)`)
@@ -78,6 +80,7 @@ type Player struct {
 	// Class  string
 	Winner bool
 	First  bool
+	ID     string `json:"-"`
 	Hero   string
 }
 
@@ -98,9 +101,13 @@ type Log struct {
 	Uploader string
 	Key      string
 	Data     []byte `json:"-"`
+	Players  map[string]Player
 
-	P1        Player `json:"player1"`
-	P2        Player `json:"player2"`
+	Status string
+
+	p1        Player
+	p2        Player
+	local     string
 	heros     []string
 	heros_cid [2]string
 
@@ -118,7 +125,12 @@ var (
 	client = &http.Client{Transport: tr}
 )
 
-func upload(l Log, wg *sync.WaitGroup) {
+func sendLogToWS(l Log, ws *websocket.Conn) {
+	d, _ := json.MarshalIndent(l, "", "\t")
+	fmt.Fprintf(ws, "%s", string(d))
+}
+
+func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	path := fmt.Sprintf("%s/g/%s/%s/", url, l.Uploader, l.Key)
@@ -128,6 +140,8 @@ func upload(l Log, wg *sync.WaitGroup) {
 	if err != nil {
 		fmt.Printf("head failed: %#v\n", err)
 	} else if resp.StatusCode == http.StatusOK {
+		l.Status = "Skipped"
+		sendLogToWS(l, ws)
 		fmt.Printf("Already uploaded %s/%s -- skipping\n", l.Uploader, l.Key)
 		return
 	} else {
@@ -152,12 +166,16 @@ func upload(l Log, wg *sync.WaitGroup) {
 	resp, err = client.Post(path, "appliation/octet-stream", &x)
 
 	if err != nil {
+		l.Status = "Failed"
 		fmt.Printf("Error contacting server: %s\n", err)
 	} else if resp.StatusCode != http.StatusAccepted {
+		l.Status = "Failed"
 		fmt.Printf("Server returned: %s -- report %s/%s", l.Uploader, l.Key)
 	} else {
+		l.Status = "Success"
 		fmt.Printf("Uploaded %s game: %s/g/%s/%s\n", l.Type, url, l.Uploader, l.Key)
 	}
+	sendLogToWS(l, ws)
 }
 
 var (
@@ -208,29 +226,29 @@ func getLogs(filenames []string) chan Log {
 			}
 			if player.MatchString(text) {
 				parts := player.NamedMatches(text)
-				if log.P1.Name == "" {
-					log.P1.Name = parts["name"]
+				if log.p1.Name == "" {
+					log.p1.Name = parts["name"]
 				} else {
-					log.P2.Name = parts["name"]
+					log.p2.Name = parts["name"]
 				}
 			}
 			if first.MatchString(text) {
 				parts := first.NamedMatches(text)
-				if log.P1.Name == parts["name"] {
-					log.P1.First = true
+				if log.p1.Name == parts["name"] {
+					log.p1.First = true
 				} else {
-					log.P2.First = true
+					log.p2.First = true
 				}
 			}
 			if hent.MatchString(text) {
 				parts := hent.NamedMatches(text)
-				if log.P1.Name == parts["name"] {
-					if log.P1.Hero == "" {
-						log.P1.Hero = parts["hid"]
+				if log.p1.Name == parts["name"] {
+					if log.p1.Hero == "" {
+						log.p1.Hero = parts["hid"]
 					}
 				} else {
-					if log.P2.Hero == "" {
-						log.P2.Hero = parts["hid"]
+					if log.p2.Hero == "" {
+						log.p2.Hero = parts["hid"]
 					}
 				}
 			}
@@ -248,10 +266,10 @@ func getLogs(filenames []string) chan Log {
 			}
 			if winner.MatchString(text) {
 				p := winner.NamedMatches(text)
-				if log.P1.Name == p["name"] {
-					log.P1.Winner = true
+				if log.p1.Name == p["name"] {
+					log.p1.Winner = true
 				} else {
-					log.P2.Winner = true
+					log.p2.Winner = true
 				}
 				log.Finish = logsandlines[0].ts
 				if logsandlines[0].ts.Before(log.Start) {
@@ -259,29 +277,56 @@ func getLogs(filenames []string) chan Log {
 				}
 				log.Duration = log.Finish.Sub(log.Start)
 			}
+			if id.MatchString(text) {
+				p := id.NamedMatches(text)
+				if log.p1.Name == p["name"] {
+					log.p1.ID = p["id"]
+				} else {
+					log.p2.ID = p["id"]
+				}
+			}
+			if local.MatchString(text) {
+				p := local.NamedMatches(text)
+				if log.p1.ID == p["id"] {
+					log.local = "1"
+				} else {
+					log.local = "2"
+				}
+			}
 
 			if gameServer.MatchString(text) {
 				gs := gameServer.NamedMatches(text)
 
 				if found_log {
-					if log.P1.Hero == log.heros[0] {
-						log.P1.Hero = log.heros_cid[0]
-						log.P2.Hero = log.heros_cid[1]
-					} else if log.P1.Hero == log.heros[1] {
-						log.P1.Hero = log.heros_cid[1]
-						log.P2.Hero = log.heros_cid[0]
+					if log.p1.Hero == log.heros[0] {
+						log.p1.Hero = log.heros_cid[0]
+						log.p2.Hero = log.heros_cid[1]
+					} else if log.p1.Hero == log.heros[1] {
+						log.p1.Hero = log.heros_cid[1]
+						log.p2.Hero = log.heros_cid[0]
 					} else {
 						fmt.Println("Unable to determine hero classes")
 					}
+
+					if log.local == "1" {
+						log.Players["local"] = log.p1
+						log.Players["remote"] = log.p2
+					} else {
+						log.Players["local"] = log.p2
+						log.Players["remote"] = log.p1
+					}
+
 					x <- log
 				}
 
 				log = Log{
+					Status:   "Uploading",
 					Start:    logsandlines[0].ts,
 					Type:     gameType,
 					Uploader: gs["client"],
 					Key:      fmt.Sprintf("%s-%s", gs["game"], gs["key"]),
 					Version:  version,
+					Players:  make(map[string]Player),
 				}
 				found_log = true
 
@@ -318,14 +363,21 @@ func getLogs(filenames []string) chan Log {
 		}
 
 		if found_log {
-			if log.P1.Hero == log.heros[0] {
-				log.P1.Hero = log.heros_cid[0]
-				log.P2.Hero = log.heros_cid[1]
-			} else if log.P1.Hero == log.heros[1] {
-				log.P1.Hero = log.heros_cid[1]
-				log.P2.Hero = log.heros_cid[0]
+			if log.p1.Hero == log.heros[0] {
+				log.p1.Hero = log.heros_cid[0]
+				log.p2.Hero = log.heros_cid[1]
+			} else if log.p1.Hero == log.heros[1] {
+				log.p1.Hero = log.heros_cid[1]
+				log.p2.Hero = log.heros_cid[0]
 			} else {
 				fmt.Println("Unable to determine hero classes")
+			}
+			if log.local == "1" {
+				log.Players["local"] = log.p1
+				log.Players["remote"] = log.p2
+			} else {
+				log.Players["local"] = log.p2
+				log.Players["remote"] = log.p1
 			}
 			x <- log
 		}
@@ -343,11 +395,8 @@ const (
 		<script>
 			var serversocket = new WebSocket("ws://localhost:12345/echo");
 			serversocket.onmessage = function(e) {
-				var d = JSON.parse(e.data);
-
-				// document.getElementById('comms').innerHTML += "<pre>" + e.data + "</pre>";
-				document.getElementById('comms').innerHTML += "<h1>" + d.player1.Name + " vs. " + d.player2.Name + "</h1>";
-				document.getElementById('comms').innerHTML += "<a href='https://hearthreplay.com/g/" + d.Uploader + "/" + d.Key + "/'>view game</a><br />";
+				//var d = JSON.parse(e.data);
+				document.getElementById('comms').innerHTML += "<pre>" + e.data + "</pre>";
 			};
 		</script>
 	</head>
@@ -363,12 +412,11 @@ func echoServer(logs chan Log) func(ws *websocket.Conn) {
 		var wg sync.WaitGroup
 		for log := range logs {
 			wg.Add(1)
-			upload(log, &wg)
-			d, _ := json.MarshalIndent(log, "", "\t")
-			fmt.Fprintf(ws, "%s", string(d))
+			go upload(log, ws, &wg)
+			sendLogToWS(log, ws)
 		}
 		wg.Wait()
-		os.Exit(0)
+		os.Exit(1)
 	}
 }
 func root(w http.ResponseWriter, r *http.Request) {
@@ -383,7 +431,7 @@ func main() {
 	fmt.Println("listening")
 
 	go func() {
-		<-time.After(time.Duration(100) * time.Millisecond)
+		<-time.After(time.Duration(10) * time.Millisecond)
 		err := exec.Command("open", "http://localhost:12345").Run()
 		if err != nil {
 			fmt.Println(err)
