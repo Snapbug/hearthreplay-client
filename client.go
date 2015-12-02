@@ -212,9 +212,6 @@ func getLogs(filenames []string) chan Log {
 					log.p2.Winner = true
 				}
 				log.Finish = line.Ts
-				if line.Ts.Before(log.Start) {
-					log.Finish = log.Finish.Add(time.Duration(24) * time.Hour)
-				}
 				log.Duration = log.Finish.Sub(log.Start)
 			}
 			if id.MatchString(line.Text) {
