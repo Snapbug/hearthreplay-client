@@ -61,7 +61,7 @@ type Log struct {
 	Uploader string
 	Key      string
 	Data     []byte `json:"-"`
-	Players  map[string]Player
+	Playrs   map[string]Player
 
 	Status string
 	Reason string
@@ -130,7 +130,7 @@ func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 		l.Reason = fmt.Sprintf("Server returned: %d. Report %s/%s", resp.StatusCode, l.Uploader, l.Key)
 	} else {
 		l.Status = "Success"
-		l.Reason = fmt.Sprintf("View at: %s/g/%s/%s", l.Type, url, l.Uploader, l.Key)
+		l.Reason = fmt.Sprintf("View at: %s/g/%s/%s/", url, l.Uploader, l.Key)
 	}
 	websocket.JSON.Send(ws, l)
 }
@@ -246,11 +246,11 @@ func getLogs(filenames []string) chan Log {
 					}
 
 					if log.local == "1" {
-						log.Players["local"] = log.p1
-						log.Players["remote"] = log.p2
+						log.Playrs["local"] = log.p1
+						log.Playrs["remote"] = log.p2
 					} else {
-						log.Players["local"] = log.p2
-						log.Players["remote"] = log.p1
+						log.Playrs["local"] = log.p2
+						log.Playrs["remote"] = log.p1
 					}
 
 					x <- log
@@ -263,7 +263,7 @@ func getLogs(filenames []string) chan Log {
 					Uploader: gs["client"],
 					Key:      fmt.Sprintf("%s-%s", gs["game"], gs["key"]),
 					Version:  version,
-					Players:  make(map[string]Player),
+					Playrs:   make(map[string]Player),
 				}
 				found_log = true
 
@@ -306,11 +306,11 @@ func getLogs(filenames []string) chan Log {
 				fmt.Println("Unable to determine hero classes")
 			}
 			if log.local == "1" {
-				log.Players["local"] = log.p1
-				log.Players["remote"] = log.p2
+				log.Playrs["local"] = log.p1
+				log.Playrs["remote"] = log.p2
 			} else {
-				log.Players["local"] = log.p2
-				log.Players["remote"] = log.p1
+				log.Playrs["local"] = log.p2
+				log.Playrs["remote"] = log.p1
 			}
 			x <- log
 		}
@@ -362,7 +362,7 @@ func main() {
 
 	if debug != "" {
 		for log := range getLogs(flag.Args()) {
-			fmt.Printf("%s v %s\n", log.Players["local"], log.Players["remote"])
+			fmt.Printf("%s v %s\n", log.Playrs["local"], log.Playrs["remote"])
 		}
 	} else {
 		http.Handle("/logs", websocket.Handler(logServer(getLogs(flag.Args()))))
