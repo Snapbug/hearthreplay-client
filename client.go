@@ -86,6 +86,12 @@ var (
 	client = &http.Client{Transport: tr}
 )
 
+func send(ws *websocket.Conn, l Log) {
+	if err := websocket.JSON.Send(ws, l); err != nil {
+		panic(err)
+	}
+}
+
 func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 	defer wg.Done()
 
@@ -98,7 +104,7 @@ func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 	} else if resp.StatusCode == http.StatusOK {
 		l.Status = "Skipped"
 		l.Reason = "Already Uploaded"
-		websocket.JSON.Send(ws, l)
+		send(ws, l)
 		fmt.Printf("Already uploaded %s/%s -- skipping\n", l.Uploader, l.Key)
 		return
 	} else {
@@ -108,8 +114,12 @@ func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 	var y bytes.Buffer
 
 	gz := gzip.NewWriter(&y)
-	gz.Write(l.data.Bytes())
-	gz.Close()
+	if _, err := gz.Write(l.data.Bytes()); err != nil {
+		panic(err)
+	}
+	if err := gz.Close(); err != nil {
+		panic(err)
+	}
 	l.Data = y.Bytes()
 
 	var x bytes.Buffer
@@ -132,7 +142,7 @@ func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 		l.Status = "Success"
 		l.Reason = fmt.Sprintf("View at: %s/g/%s/%s/", url, l.Uploader, l.Key)
 	}
-	websocket.JSON.Send(ws, l)
+	send(ws, l)
 }
 
 var (
@@ -282,15 +292,23 @@ func getLogs(filenames []string) chan Log {
 					fmt.Fprintf(dbgout, "%s\n", line.Text)
 				}
 
-				log.data.WriteString(fmt.Sprintf("%s\n", versionLine))
-				log.data.WriteString(fmt.Sprintf("%s\n", gameTypeLine))
-				log.data.WriteString(fmt.Sprintf("%s\n", line.Text))
+				if _, err := log.data.WriteString(fmt.Sprintf("%s\n", versionLine)); err != nil {
+					panic(err)
+				}
+				if _, err := log.data.WriteString(fmt.Sprintf("%s\n", gameTypeLine)); err != nil {
+					panic(err)
+				}
+				if _, err := log.data.WriteString(fmt.Sprintf("%s\n", line.Text)); err != nil {
+					panic(err)
+				}
 			} else {
 				if strings.Contains(line.Text, "GameState") {
 					if debug != "" && dbgout != nil {
 						fmt.Fprintf(dbgout, "%s\n", line.Text)
 					}
-					log.data.WriteString(fmt.Sprintf("%s\n", line.Text))
+					if _, err := log.data.WriteString(fmt.Sprintf("%s\n", line.Text)); err != nil {
+						panic(err)
+					}
 				}
 			}
 		}
@@ -346,7 +364,7 @@ func logServer(logs chan Log) func(ws *websocket.Conn) {
 		for log := range logs {
 			wg.Add(1)
 			go upload(log, ws, &wg)
-			websocket.JSON.Send(ws, log)
+			send(ws, log)
 		}
 		wg.Wait()
 		os.Exit(1)
