@@ -95,6 +95,8 @@ func send(ws *websocket.Conn, l Log) {
 func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 	defer wg.Done()
 
+	<-time.After(time.Duration(500) * time.Millisecond)
+
 	path := fmt.Sprintf("%s/g/%s/%s/", url, l.Uploader, l.Key)
 
 	resp, err := client.Head(path)
@@ -342,12 +344,33 @@ const (
 	index = `
 <html>
 	<head>
-		<meta charset="UTF-8" />
+		<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/css/bootstrap.min.css">
+		<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/css/bootstrap-theme.min.css">
+		<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/js/bootstrap.min.js"></script>
+
 		<script>
 			var serversocket = new WebSocket("ws://localhost:12345/logs");
 			serversocket.onmessage = function(e) {
 				var d = JSON.parse(e.data);
-				document.getElementById('comms').innerHTML += "<pre>" + JSON.stringify(d, undefined, 2) + "</pre>";
+				var x = document.getElementById(d.Key);
+				if (x === null) {
+					var dv = document.createElement('div');
+					var e = document.createElement('p');
+
+					e.innerHTML = JSON.stringify(d, undefined, 2);
+					e.id = d.Key;
+					e.className = "text-warning";
+
+					dv.appendChild(e);
+					document.getElementById('comms').appendChild(dv);
+				} else {
+					if (d.Status == "Success") {
+						x.className = "text-success";
+					} else {
+						x.className = "text-danger";
+					}
+				}
+				//document.getElementById('comms').innerHTML += "<pre>" + JSON.stringify(d, undefined, 2) + "</pre>";
 			};
 		</script>
 	</head>
@@ -367,7 +390,6 @@ func logServer(logs chan Log) func(ws *websocket.Conn) {
 			send(ws, log)
 		}
 		wg.Wait()
-		os.Exit(1)
 	}
 }
 
