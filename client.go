@@ -95,8 +95,6 @@ func send(ws *websocket.Conn, l Log) {
 func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	<-time.After(time.Duration(500) * time.Millisecond)
-
 	path := fmt.Sprintf("%s/g/%s/%s/", url, l.Uploader, l.Key)
 
 	resp, err := client.Head(path)
@@ -346,36 +344,65 @@ const (
 	<head>
 		<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/css/bootstrap.min.css">
 		<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/css/bootstrap-theme.min.css">
+		<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.5.0/css/font-awesome.min.css">
+		
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
 		<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/js/bootstrap.min.js"></script>
 
 		<script>
 			var serversocket = new WebSocket("ws://localhost:12345/logs");
 			serversocket.onmessage = function(e) {
 				var d = JSON.parse(e.data);
-				var x = document.getElementById(d.Key);
-				if (x === null) {
-					var dv = document.createElement('div');
-					var e = document.createElement('p');
-
-					e.innerHTML = JSON.stringify(d, undefined, 2);
-					e.id = d.Key;
-					e.className = "text-warning";
-
-					dv.appendChild(e);
-					document.getElementById('comms').appendChild(dv);
-				} else {
+				var x = $('#' + d.Key);
+				if (x.length) {
+					var html = "";
 					if (d.Status == "Success") {
-						x.className = "text-success";
+						html = '<span class="text-success"><i class="fa fa-check"></i></span>&nbsp;<small>(<a href="https://hearthreplay.com/g/' + d.Uploader + '/' + d.Key + '/">view</a>)</small>';
 					} else {
-						x.className = "text-danger";
+						html = '<span class="text-danger"><i class="fa fa-close"></i>&nbsp;' + d.Reason + '</span>';
+						if (d.Status == "Skipped") {
+							html += '&nbsp;<small>(<a href="https://hearthreplay.com/g/' + d.Uploader + '/' + d.Key + '/">view</a>)</small>';
+						}
 					}
+					$('#' + d.Key + '-status').html(html);
+				} else {
+					var tr = $('<tr>').attr('id', d.Key);
+
+					if (d.Playrs.local.Winner) {
+						tr.attr('class', 'success');
+					} else {
+						tr.attr('class', 'danger');
+					}
+
+					tr.append($('<td>').html(d.Playrs.local.Hero));
+					tr.append($('<td>').html('<span>' + d.Playrs.remote.Hero + '</span>&nbsp;<small class="text-muted">(' + d.Playrs.remote.Name + ')</span>'));
+					tr.append($('<td>').html(d.Start));
+					tr.append($('<td>').html(d.Duration));
+					tr.append($('<td>').attr('id', d.Key + '-status').html('<i class="fa fa-spinner fa-spin"></i>'));
+
+					$('#games').append(tr);
 				}
-				//document.getElementById('comms').innerHTML += "<pre>" + JSON.stringify(d, undefined, 2) + "</pre>";
+				// document.getElementById('comms').innerHTML += "<pre>" + JSON.stringify(d, undefined, 2) + "</pre>";
 			};
 		</script>
 	</head>
 	<body>
-		<div id='comms'></div>
+	<div id="comms"></div>
+		<div class="container">
+			<table class="table table-hover">
+				<thead>
+					<tr>
+						<th>As</th>
+						<th>Against</th>
+						<th>Start</th>
+						<th>Length</th>
+						<th>Status</th>
+					</tr>
+				</thead>
+				<tbody id="games">
+				</tbody>
+		</table>
+		</div>
 	</body>
 </html>
 `
@@ -390,6 +417,7 @@ func logServer(logs chan Log) func(ws *websocket.Conn) {
 			send(ws, log)
 		}
 		wg.Wait()
+		os.Exit(1)
 	}
 }
 
@@ -410,7 +438,6 @@ func main() {
 		fmt.Println("listening")
 
 		go func() {
-			<-time.After(time.Duration(100) * time.Millisecond)
 			err := exec.Command("open", "http://localhost:12345").Run()
 			if err != nil {
 				fmt.Println(err)
