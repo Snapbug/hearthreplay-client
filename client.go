@@ -8,11 +8,13 @@ import (
 	"flag"
 	"fmt"
 	"golang.org/x/net/websocket"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"strings"
 	"sync"
+	"text/template"
 	"time"
 
 	"bitbucket.org/snapbug/hsr/client/linejoin"
@@ -323,13 +325,13 @@ func getLogs(filenames []string) chan Log {
 	return x
 }
 
-const (
-	index = `
+var (
+	index = template.Must(template.New("index").Parse(`
 <html>
 	<head>
 		<meta charset="UTF-8" />
 		<script>
-			var serversocket = new WebSocket("ws://localhost:12345/logs");
+			var serversocket = new WebSocket("ws://localhost:{{ .Port }}/logs");
 			serversocket.onmessage = function(e) {
 				var d = JSON.parse(e.data);
 				document.getElementById('comms').innerHTML += "<pre>" + JSON.stringify(d, undefined, 2) + "</pre>";
@@ -340,7 +342,7 @@ const (
 		<div id='comms'></div>
 	</body>
 </html>
-`
+`))
 )
 
 func logServer(logs chan Log) func(ws *websocket.Conn) {
@@ -356,12 +358,17 @@ func logServer(logs chan Log) func(ws *websocket.Conn) {
 	}
 }
 
+type PP struct {
+	Port string
+}
+
 func root(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintln(w, index)
+	index.Execute(w, p)
 }
 
 var (
 	Version string
+	p       PP
 )
 
 func main() {
@@ -385,19 +392,26 @@ func main() {
 			go updater.BackgroundRun()
 		}
 
+		listener, err := net.Listen("tcp", "localhost:0")
+		if err != nil {
+			panic(err)
+		}
+
+		_, p.Port, _ = net.SplitHostPort(listener.Addr().String())
+
 		http.Handle("/logs", websocket.Handler(logServer(getLogs(flag.Args()))))
 		http.HandleFunc("/", root)
 		fmt.Println("listening")
 
 		go func() {
 			<-time.After(time.Duration(100) * time.Millisecond)
-			err := exec.Command("open", "http://localhost:12345").Run()
+			err := exec.Command("open", fmt.Sprintf("http://localhost:%s/", p.Port)).Run()
 			if err != nil {
 				fmt.Println(err)
 			}
 		}()
 
-		if err := http.ListenAndServe(":12345", nil); err != nil {
+		if err = http.Serve(listener, nil); err != nil {
 			panic(err)
 		}
 	}
