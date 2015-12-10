@@ -17,6 +17,8 @@ import (
 
 	"bitbucket.org/snapbug/hsr/client/linejoin"
 	"bitbucket.org/snapbug/hsr/common/regexp"
+
+	"github.com/sanbornm/go-selfupdate/selfupdate"
 )
 
 var (
@@ -76,7 +78,8 @@ type Log struct {
 }
 
 const (
-	url = "https://hearthreplay.com"
+	upload_url = "https://hearthreplay.com"
+	update_url = "https://update.hearthreplay.com"
 )
 
 var (
@@ -89,7 +92,7 @@ var (
 func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	path := fmt.Sprintf("%s/g/%s/%s/", url, l.Uploader, l.Key)
+	path := fmt.Sprintf("%s/g/%s/%s/", upload_url, l.Uploader, l.Key)
 
 	resp, err := client.Head(path)
 
@@ -130,7 +133,7 @@ func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 		l.Reason = fmt.Sprintf("Server returned: %d. Report %s/%s", resp.StatusCode, l.Uploader, l.Key)
 	} else {
 		l.Status = "Success"
-		l.Reason = fmt.Sprintf("View at: %s/g/%s/%s", l.Type, url, l.Uploader, l.Key)
+		l.Reason = fmt.Sprintf("View at: %s/g/%s/%s", l.Type, upload_url, l.Uploader, l.Key)
 	}
 	websocket.JSON.Send(ws, l)
 }
@@ -357,14 +360,31 @@ func root(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, index)
 }
 
+var (
+	Version string
+)
+
 func main() {
 	flag.Parse()
+
+	var updater = &selfupdate.Updater{
+		CurrentVersion: Version,
+		ApiURL:         update_url,
+		BinURL:         update_url,
+		DiffURL:        update_url,
+		Dir:            "update/",
+		CmdName:        "client",
+	}
 
 	if debug != "" {
 		for log := range getLogs(flag.Args()) {
 			fmt.Printf("%s v %s\n", log.Players["local"], log.Players["remote"])
 		}
 	} else {
+		if updater != nil {
+			go updater.BackgroundRun()
+		}
+
 		http.Handle("/logs", websocket.Handler(logServer(getLogs(flag.Args()))))
 		http.HandleFunc("/", root)
 		fmt.Println("listening")
