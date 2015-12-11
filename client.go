@@ -5,17 +5,20 @@ import (
 	"compress/gzip"
 	"crypto/tls"
 	"encoding/gob"
-	"flag"
+	"encoding/json"
 	"fmt"
 	"golang.org/x/net/websocket"
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
+	"text/template"
 	"time"
 
 	"bitbucket.org/snapbug/hsr/client/linejoin"
+	"bitbucket.org/snapbug/hsr/client/location"
 	"bitbucket.org/snapbug/hsr/common/regexp"
 )
 
@@ -149,8 +152,15 @@ var (
 	debug string
 )
 
-func getLogs(filenames []string) chan Log {
+func getLogs(logfolder string) chan Log {
 	x := make(chan Log)
+
+	filenames := make([]string, 0)
+	for _, f := range []string{"Power.log", "Net.log", "LoadingScreen.log", "UpdateManager.log"} {
+		filenames = append(filenames, filepath.Join(logfolder, f))
+	}
+	fmt.Printf("Looking at: %#v\n", filenames)
+
 	go func(filenames []string) {
 		var dbgout *os.File
 		var err error
@@ -338,114 +348,98 @@ func getLogs(filenames []string) chan Log {
 	return x
 }
 
-const (
-	index = `
-<html>
-	<head>
-		<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/css/bootstrap.min.css">
-		<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/css/bootstrap-theme.min.css">
-		<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.5.0/css/font-awesome.min.css">
-		
-		<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
-		<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/js/bootstrap.min.js"></script>
-
-		<script>
-			var serversocket = new WebSocket("ws://localhost:12345/logs");
-			serversocket.onmessage = function(e) {
-				var d = JSON.parse(e.data);
-				var x = $('#' + d.Key);
-				if (x.length) {
-					var html = "";
-					if (d.Status == "Success") {
-						html = '<span class="text-success"><i class="fa fa-check"></i></span>&nbsp;<small>(<a href="https://hearthreplay.com/g/' + d.Uploader + '/' + d.Key + '/">view</a>)</small>';
-					} else {
-						html = '<span class="text-danger"><i class="fa fa-close"></i>&nbsp;' + d.Reason + '</span>';
-						if (d.Status == "Skipped") {
-							html += '&nbsp;<small>(<a href="https://hearthreplay.com/g/' + d.Uploader + '/' + d.Key + '/">view</a>)</small>';
-						}
-					}
-					$('#' + d.Key + '-status').html(html);
-				} else {
-					var tr = $('<tr>').attr('id', d.Key);
-
-					if (d.Playrs.local.Winner) {
-						tr.attr('class', 'success');
-					} else {
-						tr.attr('class', 'danger');
-					}
-
-					tr.append($('<td>').html(d.Playrs.local.Hero));
-					tr.append($('<td>').html('<span>' + d.Playrs.remote.Hero + '</span>&nbsp;<small class="text-muted">(' + d.Playrs.remote.Name + ')</span>'));
-					tr.append($('<td>').html(d.Start));
-					tr.append($('<td>').html(d.Duration));
-					tr.append($('<td>').attr('id', d.Key + '-status').html('<i class="fa fa-spinner fa-spin"></i>'));
-
-					$('#games').append(tr);
-				}
-				// document.getElementById('comms').innerHTML += "<pre>" + JSON.stringify(d, undefined, 2) + "</pre>";
-			};
-		</script>
-	</head>
-	<body>
-	<div id="comms"></div>
-		<div class="container">
-			<table class="table table-hover">
-				<thead>
-					<tr>
-						<th>As</th>
-						<th>Against</th>
-						<th>Start</th>
-						<th>Length</th>
-						<th>Status</th>
-					</tr>
-				</thead>
-				<tbody id="games">
-				</tbody>
-		</table>
-		</div>
-	</body>
-</html>
-`
-)
-
-func logServer(logs chan Log) func(ws *websocket.Conn) {
+func logServer(logFolder string) func(ws *websocket.Conn) {
 	return func(ws *websocket.Conn) {
 		var wg sync.WaitGroup
-		for log := range logs {
+		for log := range getLogs(logFolder) {
 			wg.Add(1)
 			go upload(log, ws, &wg)
 			send(ws, log)
 		}
 		wg.Wait()
-		os.Exit(1)
 	}
 }
 
 func root(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintln(w, index)
+	template.Must(template.ParseFiles("tmpl/index.html")).Execute(w, nil)
+}
+
+func configHandler(w http.ResponseWriter, r *http.Request) {
+	conf = loadConfig()
+	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+}
+
+type Config struct {
+	InstallLocation location.SetupLocation
+}
+
+var conf Config
+
+func loadConfig() Config {
+	var conf Config
+	fmt.Println("loading config")
+
+	cf, err := os.Open("config.json")
+
+	if os.IsNotExist(err) {
+		l, err := location.Location()
+		if err != nil {
+			panic(err)
+		}
+		l.LogFolder = "/Users/mcrane/Dropbox/HSLOG/2/"
+		conf.InstallLocation = l
+
+		cf, err = os.Create("config.json")
+		if err != nil {
+			panic(err)
+		}
+
+		b, err := json.MarshalIndent(conf, "", "\t")
+		if err != nil {
+			panic(err)
+		}
+
+		fmt.Fprintf(cf, "%s", b)
+		err = cf.Close()
+		if err != nil {
+			panic(err)
+		}
+	} else if os.IsExist(err) {
+		panic(err)
+	}
+
+	cf, err = os.Open("config.json")
+	if err != nil {
+		panic(err)
+	}
+	err = json.NewDecoder(cf).Decode(&conf)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("loaded")
+
+	return conf
 }
 
 func main() {
-	flag.Parse()
+	conf = loadConfig()
 
-	if debug != "" {
-		for log := range getLogs(flag.Args()) {
-			fmt.Printf("%s v %s\n", log.Playrs["local"], log.Playrs["remote"])
+	http.Handle("/logs", websocket.Handler(logServer(conf.InstallLocation.LogFolder)))
+	http.HandleFunc("/", root)
+	http.Handle("/s/", http.StripPrefix("/s/", http.FileServer(http.Dir("tmpl"))))
+	http.HandleFunc("/config", configHandler)
+	http.HandleFunc("/quit", func(w http.ResponseWriter, r *http.Request) { os.Exit(1) })
+
+	go func() {
+		err := exec.Command("open", "http://localhost:12345").Run()
+		if err != nil {
+			fmt.Println(err)
 		}
-	} else {
-		http.Handle("/logs", websocket.Handler(logServer(getLogs(flag.Args()))))
-		http.HandleFunc("/", root)
-		fmt.Println("listening")
+	}()
 
-		go func() {
-			err := exec.Command("open", "http://localhost:12345").Run()
-			if err != nil {
-				fmt.Println(err)
-			}
-		}()
-
-		if err := http.ListenAndServe(":12345", nil); err != nil {
-			panic(err)
-		}
+	if err := http.ListenAndServe(":12345", nil); err != nil {
+		panic(err)
 	}
+
 }
