@@ -83,7 +83,7 @@ type Log struct {
 
 const (
 	upload_url = "https://hearthreplay.com"
-	update_url = "http://update.hearthreplay.com/"
+	update_url = "https://update.hearthreplay.com"
 )
 
 var (
@@ -459,7 +459,7 @@ func main() {
 		ApiURL:         update_url,
 		BinURL:         update_url,
 		DiffURL:        update_url,
-		Dir:            "",
+		Dir:            "tmp",
 		CmdName:        "",
 	}
 
