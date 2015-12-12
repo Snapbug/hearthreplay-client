@@ -95,7 +95,7 @@ var (
 
 func send(ws *websocket.Conn, l Log) {
 	if err := websocket.JSON.Send(ws, l); err != nil {
-		panic(err)
+		fmt.Println(err)
 	}
 }
 
@@ -372,7 +372,11 @@ type PP struct {
 }
 
 func root(w http.ResponseWriter, r *http.Request) {
-	t, err := template.ParseFiles("tmpl/index.html")
+	d, err := Asset("tmpl/index.html")
+	if err != nil {
+		panic(err)
+	}
+	t, err := template.New("index").Parse(string(d))
 	if err != nil {
 		panic(err)
 	}
@@ -385,11 +389,15 @@ func configHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func changelog(w http.ResponseWriter, r *http.Request) {
-	t, err := template.ParseFiles("tmpl/changelog.html")
+	d, err := Asset("tmpl/changelog.html")
 	if err != nil {
 		panic(err)
 	}
-	t.Execute(w, nil)
+	t, err := template.New("changelog").Parse(string(d))
+	if err != nil {
+		panic(err)
+	}
+	t.Execute(w, p)
 }
 
 var (
