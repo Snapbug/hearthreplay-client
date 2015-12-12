@@ -13,7 +13,7 @@ body { padding-top: 70px; }
 		<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.10.6/moment.min.js"></script>
 
 		<script>
-var serversocket = new WebSocket("ws://localhost:12345/logs");
+var serversocket = new WebSocket("ws://localhost:{{ .Port }}/logs");
 serversocket.onmessage = function(e) {
 	var d = JSON.parse(e.data);
 	var x = $('#' + d.Key);
@@ -75,7 +75,7 @@ serversocket.onmessage = function(e) {
 			</table>
 		</div>
 		<div class="container">
-			<p class="text-center text-muted">Version: asdf</p>
+			<p class="text-center text-muted">Version: {{ .Version }}</p>
 		</div>
 	</body>
 </html>

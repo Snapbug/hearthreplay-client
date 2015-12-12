@@ -18,3 +18,5 @@ env=darwin
 arch=amd64
 echo Building client for ${env} ${arch}
 GOOS=${env} GOARCH=${arch} godep go build -o out/${env}-${arch} -ldflags "-s -X main.version=${SHA}" client.go
+
+go-selfupdate out ${SHA}

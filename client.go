@@ -147,11 +147,7 @@ func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 		l.Reason = fmt.Sprintf("Server returned: %d. Report %s/%s", resp.StatusCode, l.Uploader, l.Key)
 	} else {
 		l.Status = "Success"
-<<<<<<< HEAD
-		l.Reason = fmt.Sprintf("View at: %s/g/%s/%s", l.Type, upload_url, l.Uploader, l.Key)
-=======
-		l.Reason = fmt.Sprintf("View at: %s/g/%s/%s/", url, l.Uploader, l.Key)
->>>>>>> bd367d54245cdb1bc356b8178eebf82856a2b3f2
+		l.Reason = fmt.Sprintf("View at: %s/g/%s/%s/", upload_url, l.Uploader, l.Key)
 	}
 	send(ws, l)
 }
@@ -369,11 +365,22 @@ func logServer(logFolder string) func(ws *websocket.Conn) {
 }
 
 type PP struct {
-	Port string
+	Port    string
+	Version string
 }
 
 func root(w http.ResponseWriter, r *http.Request) {
-	index.Execute(w, p)
+	fmt.Println("root")
+	t, err := template.ParseFiles("tmpl/index.html")
+	if err != nil {
+		panic(err)
+	}
+	t.Execute(w, p)
+}
+
+func configHandler(w http.ResponseWriter, r *http.Request) {
+	conf = loadConfig()
+	http.Redirect(w, r, "/", http.StatusOK)
 }
 
 var (
@@ -381,68 +388,44 @@ var (
 	p       PP
 )
 
-func main() {
-	flag.Parse()
+type Config struct {
+	Install location.SetupLocation
+}
 
-	var updater = &selfupdate.Updater{
-		CurrentVersion: Version,
-		ApiURL:         update_url,
-		BinURL:         update_url,
-		DiffURL:        update_url,
-		Dir:            "update/",
-		CmdName:        "client",
-	}
+var conf Config
 
-	if debug != "" {
-		for log := range getLogs(flag.Args()) {
-			fmt.Printf("%s v %s\n", log.Players["local"], log.Players["remote"])
-		}
-	} else {
-		if updater != nil {
-			go updater.BackgroundRun()
-		}
+func loadConfig() Config {
+	var conf Config
 
-		listener, err := net.Listen("tcp", "localhost:0")
+	cf, err := os.Open("config.json")
+
+	if os.IsNotExist(err) {
+		cf, err = os.Create("config.json")
 		if err != nil {
 			panic(err)
 		}
-
-		_, p.Port, _ = net.SplitHostPort(listener.Addr().String())
-
-		http.Handle("/logs", websocket.Handler(logServer(getLogs(flag.Args()))))
-		http.HandleFunc("/", root)
-		fmt.Println("listening")
-
-		go func() {
-			<-time.After(time.Duration(100) * time.Millisecond)
-			err := exec.Command("open", fmt.Sprintf("http://localhost:%s/", p.Port)).Run()
-			if err != nil {
-				fmt.Println(err)
-			}
-		}()
-
-		if err = http.Serve(listener, nil); err != nil {
+		conf.Install, err = location.Location()
+		conf.Install.LogFolder = "/Users/mcrane/Dropbox/HSLOG/2/"
+		if err != nil {
 			panic(err)
 		}
-
 		b, err := json.MarshalIndent(conf, "", "\t")
 		if err != nil {
 			panic(err)
 		}
-
 		fmt.Fprintf(cf, "%s", b)
 		err = cf.Close()
 		if err != nil {
 			panic(err)
 		}
-	} else if os.IsExist(err) {
+		cf, err = os.Open("config.json")
+		if err != nil {
+			panic(err)
+		}
+	} else if err != nil {
 		panic(err)
 	}
 
-	cf, err = os.Open("config.json")
-	if err != nil {
-		panic(err)
-	}
 	err = json.NewDecoder(cf).Decode(&conf)
 	if err != nil {
 		panic(err)
@@ -456,21 +439,42 @@ func main() {
 func main() {
 	conf = loadConfig()
 
-	http.Handle("/logs", websocket.Handler(logServer(conf.InstallLocation.LogFolder)))
+	var updater = &selfupdate.Updater{
+		CurrentVersion: Version,
+		ApiURL:         update_url,
+		BinURL:         update_url,
+		DiffURL:        update_url,
+		Dir:            "update/",
+		CmdName:        "client",
+	}
+	if updater != nil {
+		go updater.BackgroundRun()
+	}
+
+	listener, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		panic(err)
+	}
+
+	_, p.Port, _ = net.SplitHostPort(listener.Addr().String())
+	p.Version = Version
+
 	http.HandleFunc("/", root)
+	http.Handle("/logs", websocket.Handler(logServer(conf.Install.LogFolder)))
 	http.Handle("/s/", http.StripPrefix("/s/", http.FileServer(http.Dir("tmpl"))))
 	http.HandleFunc("/config", configHandler)
 	http.HandleFunc("/quit", func(w http.ResponseWriter, r *http.Request) { os.Exit(1) })
 
+	fmt.Println("listening")
+
 	go func() {
-		err := exec.Command("open", "http://localhost:12345").Run()
+		err := exec.Command("open", fmt.Sprintf("http://localhost:%s/", p.Port)).Run()
 		if err != nil {
 			fmt.Println(err)
 		}
 	}()
 
-	if err := http.ListenAndServe(":12345", nil); err != nil {
+	if err = http.Serve(listener, nil); err != nil {
 		panic(err)
 	}
-
 }
