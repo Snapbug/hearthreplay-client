@@ -372,7 +372,6 @@ type PP struct {
 }
 
 func root(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("root")
 	t, err := template.ParseFiles("tmpl/index.html")
 	if err != nil {
 		panic(err)
@@ -383,6 +382,14 @@ func root(w http.ResponseWriter, r *http.Request) {
 func configHandler(w http.ResponseWriter, r *http.Request) {
 	conf = loadConfig()
 	http.Redirect(w, r, "/", http.StatusOK)
+}
+
+func changelog(w http.ResponseWriter, r *http.Request) {
+	t, err := template.ParseFiles("tmpl/changelog.html")
+	if err != nil {
+		panic(err)
+	}
+	t.Execute(w, nil)
 }
 
 var (
@@ -467,7 +474,8 @@ func main() {
 	http.Handle("/logs", websocket.Handler(logServer(conf.Install.LogFolder)))
 	http.Handle("/s/", http.StripPrefix("/s/", http.FileServer(http.Dir("tmpl"))))
 	http.HandleFunc("/config", configHandler)
-	http.HandleFunc("/quit", func(w http.ResponseWriter, r *http.Request) { os.Exit(1) })
+	http.HandleFunc("/changelog", changelog)
+	// http.HandleFunc("/quit", func(w http.ResponseWriter, r *http.Request) { os.Exit(1) })
 
 	go func() {
 		err := exec.Command("open", fmt.Sprintf("http://localhost:%s/", p.Port)).Run()
