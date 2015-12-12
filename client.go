@@ -83,7 +83,7 @@ type Log struct {
 
 const (
 	upload_url = "https://hearthreplay.com"
-	update_url = "https://update.hearthreplay.com/"
+	update_url = "http://update.hearthreplay.com/"
 )
 
 var (
