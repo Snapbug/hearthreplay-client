@@ -8,6 +8,7 @@ echo Generating bindata.go
 go-bindata tmpl/
 
 echo Building version: ${SHA}
+echo "{\"version\": \"${SHA}\"}" >| out/version.json
 
 # env=windows
 # arch=amd64
@@ -24,9 +25,9 @@ arch=amd64
 echo Building client for ${env} ${arch}
 GOOS=${env} GOARCH=${arch} godep go build -o out/${env}-${arch} -ldflags "-s -X main.Version=${SHA}" client.go bindata.go
 
-echo Creating updates
-go-selfupdate `pwd`/out/ ${SHA}
+# echo Creating updates
+# go-selfupdate `pwd`/out/ ${SHA}
 
-echo Uploading patches to s3
-cd public
-aws s3 sync . s3://update.hearthreplay.com --acl public-read
+# echo Updating version to s3
+# cd out
+# aws s3 sync . s3://update.hearthreplay.com --acl public-read
