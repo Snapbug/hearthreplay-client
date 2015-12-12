@@ -107,15 +107,15 @@ func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 	resp, err := client.Head(path)
 
 	if err != nil {
-		fmt.Printf("head failed: %#v\n", err)
+		// fmt.Printf("head failed: %#v\n", err)
 	} else if resp.StatusCode == http.StatusOK {
 		l.Status = "Skipped"
 		l.Reason = "Already Uploaded"
 		send(ws, l)
-		fmt.Printf("Already uploaded %s/%s -- skipping\n", l.Uploader, l.Key)
+		// fmt.Printf("Already uploaded %s/%s -- skipping\n", l.Uploader, l.Key)
 		return
 	} else {
-		fmt.Printf("head failed: %#v\n", resp)
+		// fmt.Printf("head failed: %#v\n", resp)
 	}
 
 	var y bytes.Buffer
@@ -160,12 +160,49 @@ func getLogs(logfolder string) chan Log {
 	x := make(chan Log)
 
 	filenames := make([]string, 0)
-	for _, f := range []string{"Power.log", "Net.log", "LoadingScreen.log", "UpdateManager.log"} {
-		filenames = append(filenames, filepath.Join(logfolder, f))
+	for _, f := range []string{"Power", "Net", "LoadingScreen", "UpdateManager"} {
+		for _, suf := range []string{"", "_old"} {
+			fn := fmt.Sprintf("%s%s.log", f, suf)
+			p := filepath.Join(logfolder, fn)
+			if _, err := os.Stat(p); os.IsNotExist(err) {
+				fmt.Printf("Log file: %s does not exist!\n", fn)
+				continue
+			} else {
+				filenames = append(filenames, filepath.Join(logfolder, fn))
+				fmt.Printf("Success: %s existed!\n", fn)
+			}
+			break
+		}
 	}
-	fmt.Printf("Looking at: %#v\n", filenames)
 
 	go func(filenames []string) {
+		send_log := func(log Log, x chan Log) {
+			if log.p1.Hero == log.heros[0] {
+				log.p1.Hero = log.heros_cid[0]
+				log.p2.Hero = log.heros_cid[1]
+			} else if log.p1.Hero == log.heros[1] {
+				log.p1.Hero = log.heros_cid[1]
+				log.p2.Hero = log.heros_cid[0]
+			} else {
+				fmt.Println("Unable to determine hero classes")
+			}
+
+			if log.local == "1" {
+				log.Playrs["local"] = log.p1
+				log.Playrs["remote"] = log.p2
+			} else {
+				log.Playrs["local"] = log.p2
+				log.Playrs["remote"] = log.p1
+			}
+
+			p := strings.Split(log.Type, "_")
+			for i, _ := range p {
+				p[i] = strings.Title(strings.ToLower(p[i]))
+			}
+			log.Type = strings.Join(p, " ")
+			x <- log
+		}
+
 		var dbgout *os.File
 		var err error
 
@@ -259,27 +296,8 @@ func getLogs(logfolder string) chan Log {
 				gs := gameServer.NamedMatches(line.Text)
 
 				if found_log {
-					if log.p1.Hero == log.heros[0] {
-						log.p1.Hero = log.heros_cid[0]
-						log.p2.Hero = log.heros_cid[1]
-					} else if log.p1.Hero == log.heros[1] {
-						log.p1.Hero = log.heros_cid[1]
-						log.p2.Hero = log.heros_cid[0]
-					} else {
-						fmt.Println("Unable to determine hero classes")
-					}
-
-					if log.local == "1" {
-						log.Playrs["local"] = log.p1
-						log.Playrs["remote"] = log.p2
-					} else {
-						log.Playrs["local"] = log.p2
-						log.Playrs["remote"] = log.p1
-					}
-
-					x <- log
+					send_log(log, x)
 				}
-
 				log = Log{
 					Status:   "Uploading",
 					Start:    line.Ts,
@@ -328,23 +346,7 @@ func getLogs(logfolder string) chan Log {
 		}
 
 		if found_log {
-			if log.p1.Hero == log.heros[0] {
-				log.p1.Hero = log.heros_cid[0]
-				log.p2.Hero = log.heros_cid[1]
-			} else if log.p1.Hero == log.heros[1] {
-				log.p1.Hero = log.heros_cid[1]
-				log.p2.Hero = log.heros_cid[0]
-			} else {
-				fmt.Println("Unable to determine hero classes")
-			}
-			if log.local == "1" {
-				log.Playrs["local"] = log.p1
-				log.Playrs["remote"] = log.p2
-			} else {
-				log.Playrs["local"] = log.p2
-				log.Playrs["remote"] = log.p1
-			}
-			x <- log
+			send_log(log, x)
 		}
 
 		close(x)
