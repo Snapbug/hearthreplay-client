@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"text/template"
@@ -368,9 +369,10 @@ func logServer(logFolder string) func(ws *websocket.Conn) {
 }
 
 type PP struct {
-	Port    string
-	Version string
-	Latest  string
+	Port     string
+	Version  string
+	Latest   string
+	OS, Arch string
 }
 
 func root(w http.ResponseWriter, r *http.Request) {
@@ -475,6 +477,8 @@ func main() {
 		panic(err)
 	}
 	p.Latest, _ = m["version"].(string)
+	p.OS = runtime.GOOS
+	p.Arch = runtime.GOARCH
 
 	// var updater = &selfupdate.Updater{
 	// 	CurrentVersion: Version,
