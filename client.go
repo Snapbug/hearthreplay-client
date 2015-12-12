@@ -5,19 +5,21 @@ import (
 	"compress/gzip"
 	"crypto/tls"
 	"encoding/gob"
-	"flag"
+	"encoding/json"
 	"fmt"
 	"golang.org/x/net/websocket"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"text/template"
 	"time"
 
 	"bitbucket.org/snapbug/hsr/client/linejoin"
+	"bitbucket.org/snapbug/hsr/client/location"
 	"bitbucket.org/snapbug/hsr/common/regexp"
 
 	"github.com/sanbornm/go-selfupdate/selfupdate"
@@ -65,7 +67,7 @@ type Log struct {
 	Uploader string
 	Key      string
 	Data     []byte `json:"-"`
-	Players  map[string]Player
+	Playrs   map[string]Player
 
 	Status string
 	Reason string
@@ -91,6 +93,12 @@ var (
 	client = &http.Client{Transport: tr}
 )
 
+func send(ws *websocket.Conn, l Log) {
+	if err := websocket.JSON.Send(ws, l); err != nil {
+		panic(err)
+	}
+}
+
 func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 	defer wg.Done()
 
@@ -103,7 +111,7 @@ func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 	} else if resp.StatusCode == http.StatusOK {
 		l.Status = "Skipped"
 		l.Reason = "Already Uploaded"
-		websocket.JSON.Send(ws, l)
+		send(ws, l)
 		fmt.Printf("Already uploaded %s/%s -- skipping\n", l.Uploader, l.Key)
 		return
 	} else {
@@ -113,8 +121,12 @@ func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 	var y bytes.Buffer
 
 	gz := gzip.NewWriter(&y)
-	gz.Write(l.data.Bytes())
-	gz.Close()
+	if _, err := gz.Write(l.data.Bytes()); err != nil {
+		panic(err)
+	}
+	if err := gz.Close(); err != nil {
+		panic(err)
+	}
 	l.Data = y.Bytes()
 
 	var x bytes.Buffer
@@ -135,17 +147,28 @@ func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 		l.Reason = fmt.Sprintf("Server returned: %d. Report %s/%s", resp.StatusCode, l.Uploader, l.Key)
 	} else {
 		l.Status = "Success"
+<<<<<<< HEAD
 		l.Reason = fmt.Sprintf("View at: %s/g/%s/%s", l.Type, upload_url, l.Uploader, l.Key)
+=======
+		l.Reason = fmt.Sprintf("View at: %s/g/%s/%s/", url, l.Uploader, l.Key)
+>>>>>>> bd367d54245cdb1bc356b8178eebf82856a2b3f2
 	}
-	websocket.JSON.Send(ws, l)
+	send(ws, l)
 }
 
 var (
 	debug string
 )
 
-func getLogs(filenames []string) chan Log {
+func getLogs(logfolder string) chan Log {
 	x := make(chan Log)
+
+	filenames := make([]string, 0)
+	for _, f := range []string{"Power.log", "Net.log", "LoadingScreen.log", "UpdateManager.log"} {
+		filenames = append(filenames, filepath.Join(logfolder, f))
+	}
+	fmt.Printf("Looking at: %#v\n", filenames)
+
 	go func(filenames []string) {
 		var dbgout *os.File
 		var err error
@@ -251,11 +274,11 @@ func getLogs(filenames []string) chan Log {
 					}
 
 					if log.local == "1" {
-						log.Players["local"] = log.p1
-						log.Players["remote"] = log.p2
+						log.Playrs["local"] = log.p1
+						log.Playrs["remote"] = log.p2
 					} else {
-						log.Players["local"] = log.p2
-						log.Players["remote"] = log.p1
+						log.Playrs["local"] = log.p2
+						log.Playrs["remote"] = log.p1
 					}
 
 					x <- log
@@ -268,7 +291,7 @@ func getLogs(filenames []string) chan Log {
 					Uploader: gs["client"],
 					Key:      fmt.Sprintf("%s-%s", gs["game"], gs["key"]),
 					Version:  version,
-					Players:  make(map[string]Player),
+					Playrs:   make(map[string]Player),
 				}
 				found_log = true
 
@@ -287,15 +310,23 @@ func getLogs(filenames []string) chan Log {
 					fmt.Fprintf(dbgout, "%s\n", line.Text)
 				}
 
-				log.data.WriteString(fmt.Sprintf("%s\n", versionLine))
-				log.data.WriteString(fmt.Sprintf("%s\n", gameTypeLine))
-				log.data.WriteString(fmt.Sprintf("%s\n", line.Text))
+				if _, err := log.data.WriteString(fmt.Sprintf("%s\n", versionLine)); err != nil {
+					panic(err)
+				}
+				if _, err := log.data.WriteString(fmt.Sprintf("%s\n", gameTypeLine)); err != nil {
+					panic(err)
+				}
+				if _, err := log.data.WriteString(fmt.Sprintf("%s\n", line.Text)); err != nil {
+					panic(err)
+				}
 			} else {
 				if strings.Contains(line.Text, "GameState") {
 					if debug != "" && dbgout != nil {
 						fmt.Fprintf(dbgout, "%s\n", line.Text)
 					}
-					log.data.WriteString(fmt.Sprintf("%s\n", line.Text))
+					if _, err := log.data.WriteString(fmt.Sprintf("%s\n", line.Text)); err != nil {
+						panic(err)
+					}
 				}
 			}
 		}
@@ -311,11 +342,11 @@ func getLogs(filenames []string) chan Log {
 				fmt.Println("Unable to determine hero classes")
 			}
 			if log.local == "1" {
-				log.Players["local"] = log.p1
-				log.Players["remote"] = log.p2
+				log.Playrs["local"] = log.p1
+				log.Playrs["remote"] = log.p2
 			} else {
-				log.Players["local"] = log.p2
-				log.Players["remote"] = log.p1
+				log.Playrs["local"] = log.p2
+				log.Playrs["remote"] = log.p1
 			}
 			x <- log
 		}
@@ -325,36 +356,15 @@ func getLogs(filenames []string) chan Log {
 	return x
 }
 
-var (
-	index = template.Must(template.New("index").Parse(`
-<html>
-	<head>
-		<meta charset="UTF-8" />
-		<script>
-			var serversocket = new WebSocket("ws://localhost:{{ .Port }}/logs");
-			serversocket.onmessage = function(e) {
-				var d = JSON.parse(e.data);
-				document.getElementById('comms').innerHTML += "<pre>" + JSON.stringify(d, undefined, 2) + "</pre>";
-			};
-		</script>
-	</head>
-	<body>
-		<div id='comms'></div>
-	</body>
-</html>
-`))
-)
-
-func logServer(logs chan Log) func(ws *websocket.Conn) {
+func logServer(logFolder string) func(ws *websocket.Conn) {
 	return func(ws *websocket.Conn) {
 		var wg sync.WaitGroup
-		for log := range logs {
+		for log := range getLogs(logFolder) {
 			wg.Add(1)
 			go upload(log, ws, &wg)
-			websocket.JSON.Send(ws, log)
+			send(ws, log)
 		}
 		wg.Wait()
-		os.Exit(1)
 	}
 }
 
@@ -414,5 +424,53 @@ func main() {
 		if err = http.Serve(listener, nil); err != nil {
 			panic(err)
 		}
+
+		b, err := json.MarshalIndent(conf, "", "\t")
+		if err != nil {
+			panic(err)
+		}
+
+		fmt.Fprintf(cf, "%s", b)
+		err = cf.Close()
+		if err != nil {
+			panic(err)
+		}
+	} else if os.IsExist(err) {
+		panic(err)
 	}
+
+	cf, err = os.Open("config.json")
+	if err != nil {
+		panic(err)
+	}
+	err = json.NewDecoder(cf).Decode(&conf)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("loaded")
+
+	return conf
+}
+
+func main() {
+	conf = loadConfig()
+
+	http.Handle("/logs", websocket.Handler(logServer(conf.InstallLocation.LogFolder)))
+	http.HandleFunc("/", root)
+	http.Handle("/s/", http.StripPrefix("/s/", http.FileServer(http.Dir("tmpl"))))
+	http.HandleFunc("/config", configHandler)
+	http.HandleFunc("/quit", func(w http.ResponseWriter, r *http.Request) { os.Exit(1) })
+
+	go func() {
+		err := exec.Command("open", "http://localhost:12345").Run()
+		if err != nil {
+			fmt.Println(err)
+		}
+	}()
+
+	if err := http.ListenAndServe(":12345", nil); err != nil {
+		panic(err)
+	}
+
 }
