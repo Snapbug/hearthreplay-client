@@ -446,8 +446,8 @@ func main() {
 		ApiURL:         update_url,
 		BinURL:         update_url,
 		DiffURL:        update_url,
-		Dir:            "update/",
-		CmdName:        "client",
+		Dir:            "",
+		CmdName:        "",
 	}
 	if updater != nil {
 		err := updater.BackgroundRun()
