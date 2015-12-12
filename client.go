@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"golang.org/x/net/websocket"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -22,7 +23,7 @@ import (
 	"bitbucket.org/snapbug/hsr/client/location"
 	"bitbucket.org/snapbug/hsr/common/regexp"
 
-	"github.com/sanbornm/go-selfupdate/selfupdate"
+	//	"github.com/sanbornm/go-selfupdate/selfupdate"
 )
 
 var (
@@ -369,6 +370,7 @@ func logServer(logFolder string) func(ws *websocket.Conn) {
 type PP struct {
 	Port    string
 	Version string
+	Latest  string
 }
 
 func root(w http.ResponseWriter, r *http.Request) {
@@ -386,6 +388,9 @@ func root(w http.ResponseWriter, r *http.Request) {
 func configHandler(w http.ResponseWriter, r *http.Request) {
 	conf = loadConfig()
 	http.Redirect(w, r, "/", http.StatusOK)
+}
+
+func updateCheck(w http.ResponseWriter, r *http.Request) {
 }
 
 func changelog(w http.ResponseWriter, r *http.Request) {
@@ -454,21 +459,38 @@ func loadConfig() Config {
 func main() {
 	conf = loadConfig()
 
-	var updater = &selfupdate.Updater{
-		CurrentVersion: Version,
-		ApiURL:         update_url,
-		BinURL:         update_url,
-		DiffURL:        update_url,
-		Dir:            "tmp",
-		CmdName:        "",
+	resp, err := client.Get(update_url + "/version.json")
+	if err != nil {
+		panic(err)
 	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Printf("%#v", err)
+		return
+	}
+	m := make(map[string]interface{})
+	err = json.Unmarshal(body, &m)
+	if err != nil {
+		panic(err)
+	}
+	p.Latest, _ = m["version"].(string)
 
-	if updater != nil {
-		err := updater.BackgroundRun()
-		if err != nil {
-			panic(err)
-		}
-	}
+	// var updater = &selfupdate.Updater{
+	// 	CurrentVersion: Version,
+	// 	ApiURL:         update_url,
+	// 	BinURL:         update_url,
+	// 	DiffURL:        update_url,
+	// 	Dir:            "tmp",
+	// 	CmdName:        "",
+	// }
+
+	// if updater != nil {
+	// 	err := updater.BackgroundRun()
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+	// }
 
 	listener, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
@@ -483,6 +505,7 @@ func main() {
 	http.Handle("/s/", http.StripPrefix("/s/", http.FileServer(http.Dir("tmpl"))))
 	http.HandleFunc("/config", configHandler)
 	http.HandleFunc("/changelog", changelog)
+	http.HandleFunc("/update", updateCheck)
 	// http.HandleFunc("/quit", func(w http.ResponseWriter, r *http.Request) { os.Exit(1) })
 
 	go func() {

@@ -64,6 +64,11 @@ serversocket.onmessage = function(e) {
 				</ul>
 			</div>
 		</div>
+		{{ if ne .Version .Latest }}
+		<div class="container">
+			<p class="text-warning">New Version Available!</p>
+		</div>
+		{{ end }}
 		<div class="container">
 			<table class="table table-hover">
 				<thead>
