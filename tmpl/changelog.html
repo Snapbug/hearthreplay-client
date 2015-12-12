@@ -26,6 +26,11 @@ body { padding-top: 70px; }
 				</ul>
 			</div>
 		</div>
+		{{ if ne .Version .Latest }}
+		<div class="container">
+			<p class="bg-danger text-center">New Version Available! <a href="http://update.hearthreplay.com/Client-{{ .Latest }}-{{ .OS }}-{{ .Arch }}{{ if eq .Arch "windows" }}.exe{{ end }}">Download Here.</a></p>
+		</div>
+		{{ end }}
 		<div class="container">
 			<dl>
 				<dt>{{ .Version }}</dt>
