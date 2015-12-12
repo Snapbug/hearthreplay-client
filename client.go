@@ -83,7 +83,7 @@ type Log struct {
 
 const (
 	upload_url = "https://hearthreplay.com"
-	update_url = "https://update.hearthreplay.com"
+	update_url = "https://update.hearthreplay.com/"
 )
 
 var (
@@ -450,7 +450,10 @@ func main() {
 		CmdName:        "client",
 	}
 	if updater != nil {
-		go updater.BackgroundRun()
+		err := updater.BackgroundRun()
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	listener, err := net.Listen("tcp", "localhost:0")
