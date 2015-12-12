@@ -21,4 +21,9 @@ arch=amd64
 echo Building client for ${env} ${arch}
 GOOS=${env} GOARCH=${arch} godep go build -o out/${env}-${arch} -ldflags "-s -X main.Version=${SHA}" client.go
 
+echo Creating updates
 go-selfupdate `pwd`/out/ ${SHA}
+
+echo Uploading patches to s3
+cd public
+aws s3 sync . s3://update.hearthreplay.com --acl public-read
