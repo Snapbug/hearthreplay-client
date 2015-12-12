@@ -433,8 +433,6 @@ func loadConfig() Config {
 		panic(err)
 	}
 
-	fmt.Println("loaded")
-
 	return conf
 }
 
@@ -449,6 +447,7 @@ func main() {
 		Dir:            "",
 		CmdName:        "",
 	}
+
 	if updater != nil {
 		err := updater.BackgroundRun()
 		if err != nil {
@@ -469,8 +468,6 @@ func main() {
 	http.Handle("/s/", http.StripPrefix("/s/", http.FileServer(http.Dir("tmpl"))))
 	http.HandleFunc("/config", configHandler)
 	http.HandleFunc("/quit", func(w http.ResponseWriter, r *http.Request) { os.Exit(1) })
-
-	fmt.Println("listening")
 
 	go func() {
 		err := exec.Command("open", fmt.Sprintf("http://localhost:%s/", p.Port)).Run()
