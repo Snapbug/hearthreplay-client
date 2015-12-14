@@ -3,12 +3,10 @@ package main
 import (
 	"bytes"
 	"compress/gzip"
-	"crypto/tls"
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"golang.org/x/net/websocket"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -88,13 +86,6 @@ const (
 	update_url = "https://update.hearthreplay.com"
 )
 
-var (
-	tr = &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-	client = &http.Client{Transport: tr}
-)
-
 func send(ws *websocket.Conn, l Log) {
 	if err := websocket.JSON.Send(ws, l); err != nil {
 		fmt.Println(err)
@@ -106,7 +97,7 @@ func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 
 	path := fmt.Sprintf("%s/g/%s/%s/", upload_url, l.Uploader, l.Key)
 
-	resp, err := client.Head(path)
+	resp, err := http.Head(path)
 
 	if err != nil {
 		// fmt.Printf("head failed: %#v\n", err)
@@ -139,7 +130,7 @@ func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 		panic(err)
 	}
 
-	resp, err = client.Post(path, "appliation/octet-stream", &x)
+	resp, err = http.Post(path, "appliation/octet-stream", &x)
 
 	if err != nil {
 		l.Status = "Failed"
@@ -429,7 +420,7 @@ func loadConfig() Config {
 			panic(err)
 		}
 		conf.Install, err = location.Location()
-		conf.Install.LogFolder = "/Users/mcrane/Dropbox/HSLOG/2/"
+		// conf.Install.LogFolder = "/Users/mcrane/Dropbox/HSLOG/2/"
 		if err != nil {
 			panic(err)
 		}
@@ -461,21 +452,23 @@ func loadConfig() Config {
 func main() {
 	conf = loadConfig()
 
-	resp, err := client.Get(update_url + "/version.json")
-	if err != nil {
-		panic(err)
-	}
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Printf("%#v", err)
-		return
-	}
+	// resp, err := http.Get(update_url + "/version.json")
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// defer resp.Body.Close()
+	// body, err := ioutil.ReadAll(resp.Body)
+	// if err != nil {
+	// 	fmt.Printf("%#v", err)
+	// 	return
+	// }
+
 	m := make(map[string]interface{})
-	err = json.Unmarshal(body, &m)
-	if err != nil {
-		panic(err)
-	}
+
+	// err = json.Unmarshal(body, &m)
+	// if err != nil {
+	// 	panic(err)
+	// }
 	p.Latest, _ = m["version"].(string)
 	p.OS = runtime.GOOS
 	p.Arch = runtime.GOARCH
