@@ -168,11 +168,11 @@ func getLogs(logfolder string) chan Log {
 	go func(filenames []string) {
 		send_log := func(log Log, x chan Log) {
 			if log.p1.Hero == log.heros[0] {
-				log.p1.Hero = log.heros_cid[0]
-				log.p2.Hero = log.heros_cid[1]
+				log.p1.Hero = HeroClass[log.heros_cid[0]]
+				log.p2.Hero = HeroClass[log.heros_cid[1]]
 			} else if log.p1.Hero == log.heros[1] {
-				log.p1.Hero = log.heros_cid[1]
-				log.p2.Hero = log.heros_cid[0]
+				log.p1.Hero = HeroClass[log.heros_cid[1]]
+				log.p2.Hero = HeroClass[log.heros_cid[0]]
 			} else {
 				fmt.Println("Unable to determine hero classes")
 			}
@@ -353,6 +353,7 @@ func logServer(logFolder string) func(ws *websocket.Conn) {
 			send(ws, log)
 		}
 		wg.Wait()
+		os.Exit(1)
 	}
 }
 
@@ -399,6 +400,37 @@ type Config struct {
 
 var conf Config
 
+var (
+	HeroClass = map[string]string{
+		"HERO_01":  "Warrior",
+		"HERO_02":  "Shaman",
+		"HERO_03":  "Rogue",
+		"HERO_04":  "Paladin",
+		"HERO_05":  "Hunter",
+		"HERO_06":  "Druid",
+		"HERO_07":  "Warlock",
+		"HERO_08":  "Mage",
+		"HERO_09":  "Priest",
+		"HERO_08a": "Mage",
+		"HERO_05a": "Hunter",
+		"HERO_01a": "Warrior",
+	}
+	HeroName = map[string]string{
+		"HERO_01":  "Garrosh Hellscream",
+		"HERO_02":  "Thrall",
+		"HERO_03":  "Valeera Sanguinar",
+		"HERO_04":  "Uther Lightbringer",
+		"HERO_05":  "Rexxar",
+		"HERO_06":  "Malfurion Stormrage",
+		"HERO_07":  "Gul'dan",
+		"HERO_08":  "Jaina Proudmoore",
+		"HERO_09":  "Anduin Wrynn",
+		"HERO_08a": "Medivh",
+		"HERO_05a": "Alleria Windrunner",
+		"HERO_01a": "Magni Bronzebeard",
+	}
+)
+
 func main() {
 	cf, err := os.Open("config.json")
 
@@ -411,7 +443,7 @@ func main() {
 		panic(err)
 	}
 
-	if Version != conf.Version {
+	if Version != "" && Version != conf.Version {
 		panic("Version mismatch")
 	}
 
@@ -427,7 +459,13 @@ func main() {
 	http.Handle("/logs", websocket.Handler(logServer(conf.Install.LogFolder)))
 	http.Handle("/s/", http.StripPrefix("/s/", http.FileServer(http.Dir("tmpl"))))
 	http.HandleFunc("/changelog", changelog)
-	// http.HandleFunc("/quit", func(w http.ResponseWriter, r *http.Request) { os.Exit(1) })
+	http.HandleFunc("/quit", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		go func() {
+			<-time.After(1 * time.Millisecond)
+			os.Exit(1)
+		}()
+	})
 
 	go func() {
 		err := exec.Command("open", fmt.Sprintf("http://localhost:%s/", p.Port)).Run()
