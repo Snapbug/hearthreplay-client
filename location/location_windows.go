@@ -24,7 +24,7 @@ func Location() (loc SetupLocation, err error) {
 	}
 	root := syscall.UTF16ToString(buffer[:])
 
-	loc.LogFolder = filepath.Join(root, "Hearthstone_Data", "Logs")
+	loc.LogFolder = filepath.Join(root, "Logs")
 	loc.Config = filepath.Join(os.ExpandEnv("$LOCALAPPDATA"), "Blizzard", "Hearthstone", "log.config")
 	return
 }

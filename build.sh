@@ -16,14 +16,11 @@ git commit -m "Updating client version" ../server/tmpl/client.json
 mkdir out/${SHA}
 
 env=windows
-arch=amd64
-echo Building client for ${env} ${arch}
-GOOS=${env} GOARCH=${arch} godep go build -o out/${SHA}/hsrclient-${env}-${arch}-${SHA} -ldflags "-s -X main.version=${SHA}" client.go bindata.go
-
-env=windows
-arch=386
-echo Building client for ${env} ${arch}
-GOOS=${env} GOARCH=${arch} godep go build -o out/${SHA}/hsrclient-${env}-${arch}-${SHA} -ldflags "-s -X main.version=${SHA}" client.go bindata.go
+for arch in amd64 386
+do
+	echo Building client for ${env} ${arch}
+	GOOS=${env} GOARCH=${arch} godep go build -o out/${SHA}/hsrclient-${env}-${arch}-${SHA} -ldflags "-s -Hwindowsgui -X main.version=${SHA}" client.go bindata.go
+done
 
 env=darwin
 arch=amd64
