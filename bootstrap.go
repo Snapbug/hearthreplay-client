@@ -3,13 +3,19 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
+	"os/exec"
+	"runtime"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"bitbucket.org/snapbug/hsr/client/location"
+	"github.com/cheggaaa/pb"
 	"github.com/sasbury/mini"
 )
 
@@ -154,30 +160,50 @@ func checkLatest() {
 	if err != nil {
 		panic(err)
 	}
-	if resp.Status != string(http.StatusOK) {
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
 		fmt.Printf("Server returned bad status: %s\n", resp.Status)
 	}
-	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Printf("%#v", err)
-		return
+		panic(fmt.Sprintf("%#v", err))
 	}
 	err = json.Unmarshal(body, &m)
 
-	fmt.Printf("%#v\n", m)
-
-	if conf.Version != m.Version {
-		fmt.Printf("Need to download a new version: %s vs %s\n", conf.Version, m.Version)
-	} else {
+	if conf.Version == m.Version {
 		fmt.Printf("%s is the latest version!\n", conf.Version)
+	} else {
+		fmt.Printf("Need to download new version: %s\n", m.Version)
+		resp, err = http.Get(fmt.Sprintf("https://s3-us-west-2.amazonaws.com/update.hearthreplay.com/%s-%s", runtime.GOOS, runtime.GOARCH))
+
+		if err != nil {
+			panic(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			fmt.Printf("Update server returned bad status: %s\n", resp.Status)
+			return
+		}
+		i, _ := strconv.Atoi(resp.Header.Get("Content-Length"))
+		f, err := os.Create("hearthreplay-client")
+		if err != nil {
+			panic(err)
+		}
+		defer f.Close()
+		bar := pb.New(int(i)).SetUnits(pb.U_BYTES).SetRefreshRate(time.Millisecond * 10)
+		bar.ShowSpeed = true
+		bar.Start()
+		writer := io.MultiWriter(f, bar)
+		io.Copy(writer, resp.Body)
+		bar.Finish()
+
+		err = f.Chmod(0777)
+		if err != nil {
+			panic(err)
+		}
+		conf.Version = m.Version
+		writeLocalConfig()
 	}
-	// if updater != nil {
-	// 	err := updater.BackgroundRun()
-	// 	if err != nil {
-	// 		panic(err)
-	// 	}
-	// }
 }
 
 func main() {
@@ -188,4 +214,8 @@ func main() {
 	checkLocalConfig()
 	checkHSConfig()
 	checkLatest()
+
+	if err := exec.Command("./hearthreplay-client").Start(); err != nil {
+		panic(err)
+	}
 }
