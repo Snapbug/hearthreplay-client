@@ -29,7 +29,6 @@ echo Building client for ${env} ${arch}
 GOOS=${env} GOARCH=${arch} godep go build -o out/hsrclient-${env}-${arch}-${SHA} -ldflags "-s -X main.Version=${SHA}" client.go bindata.go
 
 echo Updating version to s3
-cd out
-aws s3 sync . s3://update.hearthreplay.com --acl public-read
+aws s3 sync out/*${SHA} s3://update.hearthreplay.com --acl public-read
 
 echo Push the changes, pull on server
