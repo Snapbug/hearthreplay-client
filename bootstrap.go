@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"os"
 	"sort"
 	"strings"
@@ -13,7 +15,7 @@ import (
 
 type Config struct {
 	Install location.SetupLocation
-	Verion  string
+	Version string
 }
 
 var conf Config
@@ -152,6 +154,9 @@ func checkLatest() {
 	if err != nil {
 		panic(err)
 	}
+	if resp.Status != string(http.StatusOK) {
+		fmt.Printf("Server returned bad status: %s\n", resp.Status)
+	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -160,6 +165,13 @@ func checkLatest() {
 	}
 	err = json.Unmarshal(body, &m)
 
+	fmt.Printf("%#v\n", m)
+
+	if conf.Version != m.Version {
+		fmt.Printf("Need to download a new version: %s vs %s\n", conf.Version, m.Version)
+	} else {
+		fmt.Printf("%s is the latest version!\n", conf.Version)
+	}
 	// if updater != nil {
 	// 	err := updater.BackgroundRun()
 	// 	if err != nil {

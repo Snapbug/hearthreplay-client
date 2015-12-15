@@ -2,7 +2,7 @@
 set -e
 
 # get the git commit hash
-SHA=$(git rev-parse HEAD)
+SHA=$(git log --pretty=format:"%h" -n 1)
 
 echo Generating bindata.go
 go-bindata tmpl/
