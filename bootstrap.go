@@ -202,9 +202,11 @@ func checkLatest() {
 		io.Copy(writer, resp.Body)
 		bar.Finish()
 
-		err = f.Chmod(0777)
-		if err != nil {
-			panic(err)
+		if runtime.GOOS != "windows" {
+			err = f.Chmod(0777)
+			if err != nil {
+				panic(err)
+			}
 		}
 		conf.Version = m.Version
 		writeLocalConfig()
