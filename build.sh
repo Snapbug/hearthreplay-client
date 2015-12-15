@@ -16,17 +16,17 @@ git commit -m "Updating client version" ../server/tmpl/client.json
 env=windows
 arch=amd64
 echo Building client for ${env} ${arch}
-GOOS=${env} GOARCH=${arch} godep go build -o out/client-${env}-${arch}-${SHA} -ldflags "-s -X main.version=${SHA}" client.go bindata.go
+GOOS=${env} GOARCH=${arch} godep go build -o out/hsrclient-${env}-${arch}-${SHA} -ldflags "-s -X main.version=${SHA}" client.go bindata.go
 
 env=windows
 arch=386
 echo Building client for ${env} ${arch}
-GOOS=${env} GOARCH=${arch} godep go build -o out/client-${env}-${arch}-${SHA} -ldflags "-s -X main.version=${SHA}" client.go bindata.go
+GOOS=${env} GOARCH=${arch} godep go build -o out/hsrclient-${env}-${arch}-${SHA} -ldflags "-s -X main.version=${SHA}" client.go bindata.go
 
 env=darwin
 arch=amd64
 echo Building client for ${env} ${arch}
-GOOS=${env} GOARCH=${arch} godep go build -o out/client-${env}-${arch}-${SHA} -ldflags "-s -X main.Version=${SHA}" client.go bindata.go
+GOOS=${env} GOARCH=${arch} godep go build -o out/hsrclient-${env}-${arch}-${SHA} -ldflags "-s -X main.Version=${SHA}" client.go bindata.go
 
 echo Updating version to s3
 cd out
