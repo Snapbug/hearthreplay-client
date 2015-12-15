@@ -21,8 +21,6 @@ import (
 	"bitbucket.org/snapbug/hsr/client/linejoin"
 	"bitbucket.org/snapbug/hsr/client/location"
 	"bitbucket.org/snapbug/hsr/common/regexp"
-
-	//	"github.com/sanbornm/go-selfupdate/selfupdate"
 )
 
 var (
@@ -405,39 +403,15 @@ var (
 
 type Config struct {
 	Install location.SetupLocation
+	Verion  string
 }
 
 var conf Config
 
-func loadConfig() Config {
-	var conf Config
-
+func main() {
 	cf, err := os.Open("config.json")
 
-	if os.IsNotExist(err) {
-		cf, err = os.Create("config.json")
-		if err != nil {
-			panic(err)
-		}
-		conf.Install, err = location.Location()
-		// conf.Install.LogFolder = "/Users/mcrane/Dropbox/HSLOG/2/"
-		if err != nil {
-			panic(err)
-		}
-		b, err := json.MarshalIndent(conf, "", "\t")
-		if err != nil {
-			panic(err)
-		}
-		fmt.Fprintf(cf, "%s", b)
-		err = cf.Close()
-		if err != nil {
-			panic(err)
-		}
-		cf, err = os.Open("config.json")
-		if err != nil {
-			panic(err)
-		}
-	} else if err != nil {
+	if err != nil {
 		panic(err)
 	}
 
@@ -445,49 +419,6 @@ func loadConfig() Config {
 	if err != nil {
 		panic(err)
 	}
-
-	return conf
-}
-
-func main() {
-	conf = loadConfig()
-
-	// resp, err := http.Get(update_url + "/version.json")
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// defer resp.Body.Close()
-	// body, err := ioutil.ReadAll(resp.Body)
-	// if err != nil {
-	// 	fmt.Printf("%#v", err)
-	// 	return
-	// }
-
-	m := make(map[string]interface{})
-
-	// err = json.Unmarshal(body, &m)
-	// if err != nil {
-	// 	panic(err)
-	// }
-	p.Latest, _ = m["version"].(string)
-	p.OS = runtime.GOOS
-	p.Arch = runtime.GOARCH
-
-	// var updater = &selfupdate.Updater{
-	// 	CurrentVersion: Version,
-	// 	ApiURL:         update_url,
-	// 	BinURL:         update_url,
-	// 	DiffURL:        update_url,
-	// 	Dir:            "tmp",
-	// 	CmdName:        "",
-	// }
-
-	// if updater != nil {
-	// 	err := updater.BackgroundRun()
-	// 	if err != nil {
-	// 		panic(err)
-	// 	}
-	// }
 
 	listener, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
