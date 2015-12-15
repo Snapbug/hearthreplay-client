@@ -470,7 +470,7 @@ func main() {
 		if runtime.GOOS == "darwin" {
 			err = exec.Command("open", fmt.Sprintf("http://localhost:%s/", p.Port)).Run()
 		} else {
-			err = exec.Command("cmd", []string{"/c", "start", fmt.Sprintf("http://localhost:%s/", p.Port)}).Run()
+			err = exec.Command("cmd", "/c", "start", fmt.Sprintf("http://localhost:%s/", p.Port)).Run()
 		}
 		if err != nil {
 			fmt.Println(err)
