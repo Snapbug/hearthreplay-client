@@ -2,13 +2,16 @@
 set -e
 
 # get the git commit hash
-SHA=$(git log --pretty=format:'%h' -n 1)
+SHA=$(git rev-parse HEAD)
 
 echo Generating bindata.go
 go-bindata tmpl/
 
 echo Building version: ${SHA}
-echo "{\"version\": \"${SHA}\"}" >| out/version.json
+echo "{\"version\": \"${SHA}\"}" >| ../server/client.json
+
+# commit the change -- creating a new sha -- oh well!
+git commit -m "Updating client version" ../server/client.json
 
 # env=windows
 # arch=amd64

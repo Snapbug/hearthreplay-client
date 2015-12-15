@@ -12,7 +12,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"text/template"
@@ -376,14 +375,6 @@ func root(w http.ResponseWriter, r *http.Request) {
 	t.Execute(w, p)
 }
 
-func configHandler(w http.ResponseWriter, r *http.Request) {
-	conf = loadConfig()
-	http.Redirect(w, r, "/", http.StatusOK)
-}
-
-func updateCheck(w http.ResponseWriter, r *http.Request) {
-}
-
 func changelog(w http.ResponseWriter, r *http.Request) {
 	d, err := Asset("tmpl/changelog.html")
 	if err != nil {
@@ -431,9 +422,7 @@ func main() {
 	http.HandleFunc("/", root)
 	http.Handle("/logs", websocket.Handler(logServer(conf.Install.LogFolder)))
 	http.Handle("/s/", http.StripPrefix("/s/", http.FileServer(http.Dir("tmpl"))))
-	http.HandleFunc("/config", configHandler)
 	http.HandleFunc("/changelog", changelog)
-	http.HandleFunc("/update", updateCheck)
 	// http.HandleFunc("/quit", func(w http.ResponseWriter, r *http.Request) { os.Exit(1) })
 
 	go func() {
