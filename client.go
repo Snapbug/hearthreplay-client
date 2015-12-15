@@ -394,7 +394,7 @@ var (
 
 type Config struct {
 	Install location.SetupLocation
-	Verion  string
+	Version string
 }
 
 var conf Config
@@ -411,13 +411,17 @@ func main() {
 		panic(err)
 	}
 
+	if Version != conf.Version {
+		panic("Version mismatch")
+	}
+
 	listener, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
 		panic(err)
 	}
 
 	_, p.Port, _ = net.SplitHostPort(listener.Addr().String())
-	p.Version = Version
+	p.Version = conf.Version
 
 	http.HandleFunc("/", root)
 	http.Handle("/logs", websocket.Handler(logServer(conf.Install.LogFolder)))

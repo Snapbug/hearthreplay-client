@@ -174,7 +174,7 @@ func checkLatest() {
 		fmt.Printf("%s is the latest version!\n", conf.Version)
 	} else {
 		fmt.Printf("Need to download new version: %s\n", m.Version)
-		resp, err = http.Get(fmt.Sprintf("https://s3-us-west-2.amazonaws.com/update.hearthreplay.com/%s-%s", runtime.GOOS, runtime.GOARCH))
+		resp, err = http.Get(fmt.Sprintf("https://s3-us-west-2.amazonaws.com/update.hearthreplay.com/%s-%s-%s", runtime.GOOS, runtime.GOARCH, m.Version))
 
 		if err != nil {
 			panic(err)
@@ -185,7 +185,11 @@ func checkLatest() {
 			return
 		}
 		i, _ := strconv.Atoi(resp.Header.Get("Content-Length"))
-		f, err := os.Create("hearthreplay-client")
+		o := "hearthreplay-client"
+		if runtime.GOOS == "windows" {
+			o = fmt.Sprintf("%s.exe", o)
+		}
+		f, err := os.Create(o)
 		if err != nil {
 			panic(err)
 		}
