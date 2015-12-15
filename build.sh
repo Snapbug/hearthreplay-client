@@ -19,7 +19,7 @@ env=windows
 for arch in amd64 386
 do
 	echo Building client for ${env} ${arch}
-	GOOS=${env} GOARCH=${arch} godep go build -o out/${SHA}/hsrclient-${env}-${arch}-${SHA} -ldflags "-s -Hwindowsgui -X main.version=${SHA}" client.go bindata.go
+	GOOS=${env} GOARCH=${arch} godep go build -o out/${SHA}/hsrclient-${env}-${arch}-${SHA} -ldflags "-s -H windowsgui -X main.version=${SHA}" client.go bindata.go
 done
 
 env=darwin
