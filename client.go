@@ -155,11 +155,9 @@ func getLogs(logfolder string) chan Log {
 			fn := fmt.Sprintf("%s%s.log", f, suf)
 			p := filepath.Join(logfolder, fn)
 			if _, err := os.Stat(p); os.IsNotExist(err) {
-				fmt.Printf("Log file: %s does not exist!\n", fn)
 				continue
 			} else {
 				filenames = append(filenames, filepath.Join(logfolder, fn))
-				fmt.Printf("Success: %s existed!\n", fn)
 			}
 			break
 		}
