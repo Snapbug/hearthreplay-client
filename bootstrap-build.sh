@@ -1,13 +1,10 @@
 #!/bin/bash
 env=windows
-arch=amd64
-echo Building client for ${env} ${arch}
-GOOS=${env} GOARCH=${arch} godep go build -o out/hearthreplay-updater-${env}-${arch}.exe -ldflags "-s" bootstrap.go
-
-env=windows
-arch=386
-echo Building bootstrap for ${env} ${arch}
-GOOS=${env} GOARCH=${arch} godep go build -o out/hearthreplay-updater-${env}-${arch}.exe -ldflags "-s" bootstrap.go
+for arch in amd64 386
+do
+	echo Building client for ${env} ${arch}
+	GOOS=${env} GOARCH=${arch} godep go build -o out/hearthreplay-updater-${env}-${arch}.exe -ldflags "-s" bootstrap.go
+done
 
 env=darwin
 arch=amd64
