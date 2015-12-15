@@ -88,7 +88,7 @@ func (h HSConfigSection) String() string {
 }
 
 var (
-	needed = HSConfigSection{LogLevel: 1, FilePrinting: false, ConsolePrinting: true, ScreenPrinting: false}
+	needed = HSConfigSection{LogLevel: 1, FilePrinting: true, ConsolePrinting: false, ScreenPrinting: false}
 	hsConf = make(map[string]HSConfigSection)
 )
 
