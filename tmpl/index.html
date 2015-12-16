@@ -45,6 +45,7 @@ serversocket.onmessage = function(e) {
 		tr.append($('<td>').attr('id', d.Key + '-status').html('<i class="fa fa-spinner fa-spin"></i>'));
 
 		$('#games').prepend(tr);
+		$('#user_header').html('<a href="https://hearthreplay.com/g/' + d.Uploader + '/">View List of Your Games</a>');
 	}
 };
 		</script>
@@ -61,6 +62,7 @@ serversocket.onmessage = function(e) {
 			</div>
 		</div>
 		<div class="container">
+			<div id="user_header" class="text-center"></div>
 			<table class="table table-hover">
 				<thead>
 					<tr>
