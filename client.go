@@ -347,6 +347,10 @@ func logServer(logFolder string) func(ws *websocket.Conn) {
 	return func(ws *websocket.Conn) {
 		var wg sync.WaitGroup
 		for log := range getLogs(logFolder) {
+			if conf.Player == "" {
+				conf.Player = log.Uploader
+				writeLocalConfig()
+			}
 			wg.Add(1)
 			go upload(log, ws, &wg)
 			send(ws, log)
@@ -358,33 +362,24 @@ func logServer(logFolder string) func(ws *websocket.Conn) {
 
 type PP struct {
 	Port     string
+	Player   string
 	Version  string
 	Latest   string
 	OS, Arch string
 }
 
-func root(w http.ResponseWriter, r *http.Request) {
-	d, err := Asset("tmpl/index.html")
-	if err != nil {
-		panic(err)
+func make_tmpl_handler(tn string) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		d, err := Asset(fmt.Sprintf("tmpl/%s.html", tn))
+		if err != nil {
+			panic(err)
+		}
+		t, err := template.New(tn).Parse(string(d))
+		if err != nil {
+			panic(err)
+		}
+		t.Execute(w, p)
 	}
-	t, err := template.New("index").Parse(string(d))
-	if err != nil {
-		panic(err)
-	}
-	t.Execute(w, p)
-}
-
-func changelog(w http.ResponseWriter, r *http.Request) {
-	d, err := Asset("tmpl/changelog.html")
-	if err != nil {
-		panic(err)
-	}
-	t, err := template.New("changelog").Parse(string(d))
-	if err != nil {
-		panic(err)
-	}
-	t.Execute(w, p)
 }
 
 var (
@@ -395,6 +390,7 @@ var (
 type Config struct {
 	Install location.SetupLocation
 	Version string
+	Player  string
 }
 
 var conf Config
@@ -402,36 +398,36 @@ var conf Config
 var (
 	HeroClass = map[string]string{
 		"HERO_01":  "Warrior",
+		"HERO_01a": "Warrior",
 		"HERO_02":  "Shaman",
 		"HERO_03":  "Rogue",
 		"HERO_04":  "Paladin",
 		"HERO_05":  "Hunter",
+		"HERO_05a": "Hunter",
 		"HERO_06":  "Druid",
 		"HERO_07":  "Warlock",
 		"HERO_08":  "Mage",
-		"HERO_09":  "Priest",
 		"HERO_08a": "Mage",
-		"HERO_05a": "Hunter",
-		"HERO_01a": "Warrior",
+		"HERO_09":  "Priest",
 	}
 	HeroName = map[string]string{
 		"HERO_01":  "Garrosh Hellscream",
+		"HERO_01a": "Magni Bronzebeard",
 		"HERO_02":  "Thrall",
 		"HERO_03":  "Valeera Sanguinar",
 		"HERO_04":  "Uther Lightbringer",
 		"HERO_05":  "Rexxar",
+		"HERO_05a": "Alleria Windrunner",
 		"HERO_06":  "Malfurion Stormrage",
 		"HERO_07":  "Gul'dan",
 		"HERO_08":  "Jaina Proudmoore",
-		"HERO_09":  "Anduin Wrynn",
 		"HERO_08a": "Medivh",
-		"HERO_05a": "Alleria Windrunner",
-		"HERO_01a": "Magni Bronzebeard",
+		"HERO_09":  "Anduin Wrynn",
 	}
 )
 
 func main() {
-	cf, err := os.Open("config.json")
+	cf, err := os.Open(local_conf)
 
 	if err != nil {
 		panic(err)
@@ -445,6 +441,13 @@ func main() {
 	if Version != "" && Version != conf.Version {
 		panic("Version mismatch")
 	}
+	p.Version = Version //conf.Version
+	p.Player = conf.Player
+
+	if Version == "" {
+		conf.Install.LogFolder = "/Users/mcrane/Dropbox/HSLOG/2"
+		p.Version = "testing"
+	}
 
 	listener, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
@@ -452,33 +455,54 @@ func main() {
 	}
 
 	_, p.Port, _ = net.SplitHostPort(listener.Addr().String())
-	p.Version = conf.Version
 
-	http.HandleFunc("/", root)
+	http.HandleFunc("/", make_tmpl_handler("index"))
+	http.HandleFunc("/changelog", make_tmpl_handler("changelog"))
+
 	http.Handle("/logs", websocket.Handler(logServer(conf.Install.LogFolder)))
-	http.Handle("/s/", http.StripPrefix("/s/", http.FileServer(http.Dir("tmpl"))))
-	http.HandleFunc("/changelog", changelog)
-	http.HandleFunc("/quit", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		go func() {
-			<-time.After(1 * time.Millisecond)
-			os.Exit(1)
-		}()
-	})
+
+	// http.HandleFunc("/quit", func(w http.ResponseWriter, r *http.Request) {
+	// 	w.WriteHeader(http.StatusOK)
+	// 	go func() {
+	// 		<-time.After(10 * time.Millisecond)
+	// 		os.Exit(1)
+	// 	}()
+	// })
 
 	go func() {
 		var err error
+		var cmd *exec.Cmd
+		url := fmt.Sprintf("http://localhost:%s/", p.Port)
 		if runtime.GOOS == "darwin" {
-			err = exec.Command("open", fmt.Sprintf("http://localhost:%s/", p.Port)).Run()
+			cmd = exec.Command("open", url)
 		} else {
-			err = exec.Command("cmd", "/c", "start", fmt.Sprintf("http://localhost:%s/", p.Port)).Run()
+			cmd = exec.Command("cmd", "/c", "start", url)
 		}
-		if err != nil {
+		if err = cmd.Run(); err != nil {
 			fmt.Println(err)
 		}
 	}()
 
 	if err = http.Serve(listener, nil); err != nil {
+		panic(err)
+	}
+}
+
+const (
+	local_conf = "config.json"
+)
+
+func writeLocalConfig() {
+	cf, err := os.Create(local_conf)
+	if err != nil {
+		panic(err)
+	}
+	b, err := json.MarshalIndent(conf, "", "\t")
+	if err != nil {
+		panic(err)
+	}
+	fmt.Fprintf(cf, "%s", b)
+	if err = cf.Close(); err != nil {
 		panic(err)
 	}
 }

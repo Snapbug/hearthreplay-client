@@ -92,15 +92,17 @@ var (
 	hsConf = make(map[string]HSConfigSection)
 )
 
-func checkHSConfig() {
+func checkHSConfig() (ok bool) {
 	header("Setting up HS logging")
+	ok = true
 
 	hslog, err := os.Open(conf.Install.Config)
 	if os.IsNotExist(err) {
-		fmt.Printf("HS log configuration did not exist, creating.")
+		fmt.Printf("HS log configuration did not exist, creating.\n")
 		for _, section := range []string{"Power", "Net", "LoadingScreen", "UpdateManager"} {
 			hsConf[section] = needed
 		}
+		ok = false
 	} else if err != nil {
 		panic(err)
 	} else {
@@ -113,14 +115,16 @@ func checkHSConfig() {
 
 		for _, section := range []string{"Power", "Net", "LoadingScreen", "UpdateManager"} {
 			sec := HSConfigSection{}
-			ok := cf.DataFromSection(section, &sec)
-			if !ok {
+			k := cf.DataFromSection(section, &sec)
+			if !k {
 				fmt.Printf("%s section missing\n", section)
 				hsConf[section] = needed
+				ok = false
 			} else {
 				if sec != needed {
 					fmt.Printf("%s section doesn't match expected -- being overwritten\n", section)
 					hsConf[section] = needed
+					ok = false
 				} else {
 					fmt.Printf("%s section ok\n", section)
 				}
@@ -142,6 +146,7 @@ func checkHSConfig() {
 		fmt.Fprintf(hslog, "[%s]\n%s\n", k, hsConf[k])
 	}
 	hslog.Close()
+	return
 }
 
 const (
@@ -214,15 +219,23 @@ func checkLatest() {
 }
 
 func main() {
-	fmt.Println("======================================")
-	fmt.Println("Hearthstone Replay Client Bootstrapper")
-	fmt.Println("======================================")
+	fmt.Println("==================================")
+	fmt.Println("Hearthstone Replay Client Launcher")
+	fmt.Println("==================================")
 
 	checkLocalConfig()
-	checkHSConfig()
+	ok := checkHSConfig()
 	checkLatest()
 
-	if err := exec.Command("./hearthreplay-client").Start(); err != nil {
-		panic(err)
+	if ok {
+		if err := exec.Command("./hearthreplay-client").Start(); err != nil {
+			panic(err)
+		}
+	} else {
+		fmt.Println("")
+		fmt.Println("==================================")
+		fmt.Println("Logging setup for future sessions.")
+		fmt.Println("No games to be uploaded this time.")
+		fmt.Println("==================================")
 	}
 }
