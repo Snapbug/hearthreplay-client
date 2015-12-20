@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -13,10 +15,13 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"bitbucket.org/snapbug/hsr/client/location"
 
+	"github.com/cheggaaa/pb"
 	"github.com/inconshreveable/go-update"
 	"github.com/kardianos/osext"
 	"github.com/sasbury/mini"
@@ -232,10 +237,21 @@ func checkLatest() {
 			fmt.Printf("Update server returned bad status: %s\n", resp.Status)
 			return
 		}
-		err := verifiedUpdate(resp.Body, m)
+
+		i, _ := strconv.Atoi(resp.Header.Get("Content-Length"))
+
+		bar := pb.New(i).SetUnits(pb.U_BYTES).SetRefreshRate(time.Millisecond * 10)
+		bar.ShowSpeed = true
+		bar.Start()
+
+		var buf bytes.Buffer
+		writer := io.MultiWriter(&buf, bar)
+		io.Copy(writer, resp.Body)
+		err := verifiedUpdate(&buf, m)
 		if err != nil {
 			panic(err)
 		}
+		bar.Finish()
 
 		conf.Version = m.Version
 		writeLocalConfig()
@@ -279,10 +295,13 @@ func main() {
 			panic(err)
 		}
 	} else {
-		fmt.Println("")
+		fmt.Println()
 		fmt.Println("==================================")
 		fmt.Println("Logging setup for future sessions.")
 		fmt.Println("No games to be uploaded this time.")
 		fmt.Println("==================================")
+		fmt.Println()
+		fmt.Println("Press Enter to Continue.")
+		_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
 	}
 }
