@@ -2,13 +2,13 @@
 set -e
 
 function doclient() {
-	j="../server/tmpl/client-$1-$2.json"
+	j="../server/tmpl/client.$1.$2.json"
 	p="out/$3/hsrclient-$1-$2-$3"
 	checksum=$(openssl dgst -sha256 ${p} | sed 's/^.* //')
 
 	signature=$(openssl dgst -sha256 -sign private.pem -keyform PEM ${p} | base64)
 
-	echo "{\"version\": \"$1\", \"checksum\": \"${checksum}\", \"signature\":\"${signature}\"}" >| ${j}
+	echo "{\"version\": \"$3\", \"checksum\": \"${checksum}\", \"signature\":\"${signature}\"}" >| ${j}
 }
 
 # get the git commit hash

@@ -201,11 +201,14 @@ func checkLatest() {
 	}
 	err = json.Unmarshal(body, &m)
 
+	fmt.Printf("%#v\n", m)
+
 	if conf.Version == m.Version {
 		fmt.Printf("%s is the latest version!\n", conf.Version)
 	} else {
 		fmt.Printf("Need to download new version: %s\n", m.Version)
 		url := fmt.Sprintf("https://s3-us-west-2.amazonaws.com/update.hearthreplay.com/hsrclient-%s-%s-%s", runtime.GOOS, runtime.GOARCH, m.Version)
+
 		resp, err = http.Get(url)
 
 		if err != nil {
@@ -258,7 +261,7 @@ func main() {
 	checkLatest()
 
 	if ok {
-		if err := exec.Command("./hearthreplay-client").Start(); err != nil {
+		if err := exec.Command("./client").Start(); err != nil {
 			panic(err)
 		}
 	} else {
