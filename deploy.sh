@@ -9,6 +9,8 @@ function doclient() {
 	signature=$(openssl dgst -sha256 -sign private.pem -keyform PEM ${p} | base64)
 
 	echo "{\"version\": \"$3\", \"checksum\": \"${checksum}\", \"signature\":\"${signature}\"}" >| ${j}
+
+	git add ${j}
 }
 
 # get the git commit hash
@@ -38,5 +40,6 @@ doclient ${env} ${arch} ${SHA}
 echo Updating version to s3
  aws s3 sync out/${SHA} s3://update.hearthreplay.com --acl public-read
 
-# commit the change -- creating a new sha -- oh well!
-# git commit -m "Updating client version" ../server/tmpl/client.json
+git commit -m "Updating client version"
+
+echo git push and pull on server to finish deploy
