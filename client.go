@@ -358,6 +358,7 @@ func logServer(logFolder string) func(ws *websocket.Conn) {
 		}
 		wg.Wait()
 		ws.Close()
+		os.Exit(0)
 	}
 }
 
