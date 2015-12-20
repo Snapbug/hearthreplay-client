@@ -51,7 +51,7 @@ serversocket.onmessage = function(e) {
 	}
 };
 serversocket.onclose = function(e) {
-	$('#footer').append($('<h3>').text("Finished"));
+	$('#progress').text("Finished");
 };
 		</script>
 	</head>
@@ -72,7 +72,7 @@ serversocket.onclose = function(e) {
 				<a href="https://hearthreplay.com/g/{{ .Player }}/">View List of Your Games</a>
 				{{ end }}
 			</div>
-			<h3>This Session:</h3>
+			<h3>This Session: <span class="text-muted" id="progress">Uploading...</span></h3>
 			<table class="table table-hover">
 				<thead>
 					<tr>
@@ -87,8 +87,6 @@ serversocket.onclose = function(e) {
 				<tbody id="games">
 				</tbody>
 			</table>
-			<div id="footer" class="text-center">
-			</div>
 		</div>
 	</body>
 </html>

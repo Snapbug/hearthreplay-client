@@ -160,18 +160,19 @@ func verifiedUpdate(binary io.Reader, givenUpdate VersionUpdate) (err error) {
 	f, err := os.Open(client_prog)
 	if err != nil {
 		if os.IsNotExist(err) {
-			f, err := os.Create(client_prog)
+			f, err = os.Create(client_prog)
 			if err != nil {
 				panic(err)
 			}
-			f.Close()
 		} else {
 			panic(err)
 		}
 	}
 	if runtime.GOOS == "darwin" {
-		stat, err := os.Stat(client_prog)
+		stat, err := f.Stat()
 		if err != nil {
+			n, _ := err.(*os.PathError)
+			fmt.Printf("%#v\n", n)
 			panic(err)
 		}
 		current := stat.Mode()
@@ -293,12 +294,14 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	client_prog = strings.Trim(client_prog, "'")
 	client_prog = filepath.Join(folder, client_prog)
 	local_conf = filepath.Join(folder, local_conf)
 
 	fmt.Println("==================================")
 	fmt.Println("Hearthstone Replay Client Launcher")
 	fmt.Println("==================================")
+	fmt.Printf("|%s|\n", client_prog)
 
 	checkLocalConfig()
 	ok := checkHSConfig()
