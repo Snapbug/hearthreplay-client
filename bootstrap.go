@@ -170,7 +170,7 @@ func verifiedUpdate(binary io.Reader, givenUpdate VersionUpdate) (err error) {
 		}
 	}
 	if runtime.GOOS == "darwin" {
-		stat, err := f.Stat()
+		stat, err := os.Stat(client_prog)
 		if err != nil {
 			panic(err)
 		}
