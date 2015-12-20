@@ -31,3 +31,5 @@ echo Updating version to s3
 aws s3 sync out/${SHA} s3://update.hearthreplay.com --acl public-read
 
 echo Push the changes, pull on server
+
+echo openssl dgst -sha256 -sign private.pem -keyform PEM -out signature update
