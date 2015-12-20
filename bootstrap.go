@@ -301,7 +301,6 @@ func main() {
 	fmt.Println("==================================")
 	fmt.Println("Hearthstone Replay Client Launcher")
 	fmt.Println("==================================")
-	fmt.Printf("|%s|\n", client_prog)
 
 	checkLocalConfig()
 	ok := checkHSConfig()
