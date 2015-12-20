@@ -201,8 +201,6 @@ func checkLatest() {
 	}
 	err = json.Unmarshal(body, &m)
 
-	fmt.Printf("%#v\n", m)
-
 	if conf.Version == m.Version {
 		fmt.Printf("%s is the latest version!\n", conf.Version)
 	} else {
