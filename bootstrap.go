@@ -153,6 +153,25 @@ type VersionUpdate struct {
 }
 
 func verifiedUpdate(binary io.Reader, givenUpdate VersionUpdate) (err error) {
+	root, err := osext.ExecutableFolder()
+	if err != nil {
+		return
+	}
+	target := filepath.Join(root, client_prog)
+	f, err := os.Open(target)
+	if err != nil {
+		if os.IsNotExist(err) {
+			f, err := os.Create(target)
+			if err != nil {
+				panic(err)
+			}
+			f.Close()
+		} else {
+			panic(err)
+		}
+	}
+	f.Close()
+
 	checksum, err := hex.DecodeString(givenUpdate.Checksum)
 	if err != nil {
 		return
@@ -161,16 +180,12 @@ func verifiedUpdate(binary io.Reader, givenUpdate VersionUpdate) (err error) {
 	if err != nil {
 		return
 	}
-	root, err := osext.ExecutableFolder()
-	if err != nil {
-		return
-	}
 	opts := update.Options{
 		Checksum:   checksum,
 		Signature:  signature,
 		Verifier:   update.NewRSAVerifier(),
 		Patcher:    nil,
-		TargetPath: filepath.Join(root, "client"),
+		TargetPath: target,
 	}
 	err = opts.SetPublicKeyPEM([]byte(publicKey))
 	if err != nil {
@@ -205,7 +220,7 @@ func checkLatest() {
 		fmt.Printf("%s is the latest version!\n", conf.Version)
 	} else {
 		fmt.Printf("Need to download new version: %s\n", m.Version)
-		url := fmt.Sprintf("https://s3-us-west-2.amazonaws.com/update.hearthreplay.com/hsrclient-%s-%s-%s", runtime.GOOS, runtime.GOARCH, m.Version)
+		url := fmt.Sprintf("https://s3-us-west-2.amazonaws.com/update.hearthreplay.com/%s-%s-%s-%s", client_prog, runtime.GOOS, runtime.GOARCH, m.Version)
 
 		resp, err = http.Get(url)
 
@@ -236,7 +251,8 @@ var (
 )
 
 const (
-	local_conf = "config.json"
+	local_conf  = "config.json"
+	client_prog = "hearthreplay-client"
 
 	publicKey = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnFz67+ql0kCILF3Ns/Ua
@@ -259,7 +275,7 @@ func main() {
 	checkLatest()
 
 	if ok {
-		if err := exec.Command("./client").Start(); err != nil {
+		if err := exec.Command(fmt.Sprintf("./%s", client_prog)).Start(); err != nil {
 			panic(err)
 		}
 	} else {
