@@ -18,6 +18,8 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/icub3d/graceful"
+
 	"bitbucket.org/snapbug/hsr/client/linejoin"
 	"bitbucket.org/snapbug/hsr/client/location"
 	"bitbucket.org/snapbug/hsr/common/regexp"
@@ -81,7 +83,6 @@ type Log struct {
 
 const (
 	upload_url = "https://hearthreplay.com"
-	update_url = "https://update.hearthreplay.com"
 )
 
 func send(ws *websocket.Conn, l Log) {
@@ -356,7 +357,7 @@ func logServer(logFolder string) func(ws *websocket.Conn) {
 			send(ws, log)
 		}
 		wg.Wait()
-		os.Exit(1)
+		ws.Close()
 	}
 }
 
@@ -454,20 +455,27 @@ func main() {
 		panic(err)
 	}
 
-	_, p.Port, _ = net.SplitHostPort(listener.Addr().String())
+	s := graceful.NewServer(&http.Server{
+		Addr:    listener.Addr().String(),
+		Handler: nil,
+	})
 
 	http.HandleFunc("/", make_tmpl_handler("index"))
 	http.HandleFunc("/changelog", make_tmpl_handler("changelog"))
+	http.HandleFunc("/quit", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
 
 	http.Handle("/logs", websocket.Handler(logServer(conf.Install.LogFolder)))
 
-	// http.HandleFunc("/quit", func(w http.ResponseWriter, r *http.Request) {
-	// 	w.WriteHeader(http.StatusOK)
-	// 	go func() {
-	// 		<-time.After(10 * time.Millisecond)
-	// 		os.Exit(1)
-	// 	}()
-	// })
+	fmt.Printf("Listening on: %s\n", listener.Addr())
+
+	// sigs := make(chan os.Signal)
+	// signal.Notify(sigs, syscall.SIGTERM)
+	// go func() {
+	// 	<-sigs
+	// 	s.Close()
+	// }()
 
 	go func() {
 		var err error
@@ -483,7 +491,7 @@ func main() {
 		}
 	}()
 
-	if err = http.Serve(listener, nil); err != nil {
+	if err = s.Serve(listener); err != nil {
 		panic(err)
 	}
 }
