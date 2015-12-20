@@ -454,6 +454,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	_, p.Port, _ = net.SplitHostPort(listener.Addr().String())
 
 	s := graceful.NewServer(&http.Server{
 		Addr:    listener.Addr().String(),
