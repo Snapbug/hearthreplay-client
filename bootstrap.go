@@ -25,6 +25,7 @@ import (
 type Config struct {
 	Install location.SetupLocation
 	Version string
+	Player  string
 }
 
 func header(h string) {
