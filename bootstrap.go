@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -8,14 +10,15 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"sort"
-	"strconv"
 	"strings"
-	"time"
 
 	"bitbucket.org/snapbug/hsr/client/location"
-	"github.com/cheggaaa/pb"
+
+	"github.com/inconshreveable/go-update"
+	"github.com/kardianos/osext"
 	"github.com/sasbury/mini"
 )
 
@@ -23,8 +26,6 @@ type Config struct {
 	Install location.SetupLocation
 	Version string
 }
-
-var conf Config
 
 func header(h string) {
 	fmt.Println("")
@@ -87,11 +88,6 @@ func (h HSConfigSection) String() string {
 	return fmt.Sprintf("LogLevel=%d\nFilePrinting=%v\nConsolePrinting=%v\nScreenPrinting=%v\n", h.LogLevel, h.FilePrinting, h.ConsolePrinting, h.ScreenPrinting)
 }
 
-var (
-	needed = HSConfigSection{LogLevel: 1, FilePrinting: true, ConsolePrinting: false, ScreenPrinting: false}
-	hsConf = make(map[string]HSConfigSection)
-)
-
 func checkHSConfig() (ok bool) {
 	header("Setting up HS logging")
 	ok = true
@@ -149,16 +145,45 @@ func checkHSConfig() (ok bool) {
 	return
 }
 
-const (
-	update_url = "https://hearthreplay.com/v"
-	local_conf = "config.json"
-)
+type VersionUpdate struct {
+	Version   string `json:"version"`
+	Checksum  string `json:"checksum"`
+	Signature string `json:"signature"`
+}
+
+func verifiedUpdate(binary io.Reader, givenUpdate VersionUpdate) (err error) {
+	checksum, err := hex.DecodeString(givenUpdate.Checksum)
+	if err != nil {
+		return
+	}
+	signature, err := base64.StdEncoding.DecodeString(givenUpdate.Signature)
+	if err != nil {
+		return
+	}
+	root, err := osext.ExecutableFolder()
+	if err != nil {
+		return
+	}
+	opts := update.Options{
+		Checksum:   checksum,
+		Signature:  signature,
+		Verifier:   update.NewRSAVerifier(),
+		Patcher:    nil,
+		TargetPath: filepath.Join(root, "client"),
+	}
+	err = opts.SetPublicKeyPEM([]byte(publicKey))
+	if err != nil {
+		return
+	}
+	err = update.Apply(binary, opts)
+	if err != nil {
+		return
+	}
+	return
+}
 
 func checkLatest() {
-	var m struct {
-		Version string `json:"version"`
-	}
-
+	var m VersionUpdate
 	header("Checking version of client")
 
 	resp, err := http.Get(update_url)
@@ -190,33 +215,37 @@ func checkLatest() {
 			fmt.Printf("Update server returned bad status: %s\n", resp.Status)
 			return
 		}
-		i, _ := strconv.Atoi(resp.Header.Get("Content-Length"))
-		o := "hearthreplay-client"
-		if runtime.GOOS == "windows" {
-			o = fmt.Sprintf("%s.exe", o)
-		}
-		f, err := os.Create(o)
+		err := verifiedUpdate(resp.Body, m)
 		if err != nil {
 			panic(err)
 		}
-		defer f.Close()
-		bar := pb.New(int(i)).SetUnits(pb.U_BYTES).SetRefreshRate(time.Millisecond * 10)
-		bar.ShowSpeed = true
-		bar.Start()
-		writer := io.MultiWriter(f, bar)
-		io.Copy(writer, resp.Body)
-		bar.Finish()
 
-		if runtime.GOOS != "windows" {
-			err = f.Chmod(0777)
-			if err != nil {
-				panic(err)
-			}
-		}
 		conf.Version = m.Version
 		writeLocalConfig()
 	}
 }
+
+var (
+	conf Config
+
+	needed     = HSConfigSection{LogLevel: 1, FilePrinting: true, ConsolePrinting: false, ScreenPrinting: false}
+	hsConf     = make(map[string]HSConfigSection)
+	update_url = fmt.Sprintf("https://hearthreplay.com/v?os=%s&arch=%s", runtime.GOOS, runtime.GOARCH)
+)
+
+const (
+	local_conf = "config.json"
+
+	publicKey = `-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnFz67+ql0kCILF3Ns/Ua
+geKyrD1/SaQlfxSriP4PCErbZMa5HWBpaQxRKU+EGkxIQYzSEJlkCnajhXTLVIzJ
+FeFiGZdUnv0HQfAmyC0Gsi4h1wrx3f4dgwc0BO2l9H5ExwWT25kdR7EFbj5rNRMq
+4qqD+4yj8BnYJ30TXqTCGW/y4aZnMzs/OJapp1ODItRZJk0YeVplo+JrDRKgvXkt
+vErvjEBOKwrXmpdIXRY+OXrMrh8KCOa3T785AtK5IYDJrMdhdvo0xSElGvuj/rZT
+S7B0I5EtA88/vmKbLqKz9GH3+XxUhWOWYxy73Rmu5zNKQYvqBcBzAFB0Ud8LPr7M
+fQIDAQAB
+-----END PUBLIC KEY-----`
+)
 
 func main() {
 	fmt.Println("==================================")
