@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/base64"
 	"encoding/hex"
@@ -158,20 +157,26 @@ type VersionUpdate struct {
 }
 
 func verifiedUpdate(binary io.Reader, givenUpdate VersionUpdate) (err error) {
-	root, err := osext.ExecutableFolder()
-	if err != nil {
-		return
-	}
-	target := filepath.Join(root, client_prog)
-	f, err := os.Open(target)
+	f, err := os.Open(client_prog)
 	if err != nil {
 		if os.IsNotExist(err) {
-			f, err := os.Create(target)
+			f, err := os.Create(client_prog)
 			if err != nil {
 				panic(err)
 			}
 			f.Close()
 		} else {
+			panic(err)
+		}
+	}
+	if runtime.GOOS == "darwin" {
+		stat, err := f.Stat()
+		if err != nil {
+			panic(err)
+		}
+		current := stat.Mode()
+		current |= 0111 // set executable bits
+		if err := f.Chmod(current); err != nil {
 			panic(err)
 		}
 	}
@@ -190,7 +195,7 @@ func verifiedUpdate(binary io.Reader, givenUpdate VersionUpdate) (err error) {
 		Signature:  signature,
 		Verifier:   update.NewRSAVerifier(),
 		Patcher:    nil,
-		TargetPath: target,
+		TargetPath: client_prog,
 	}
 	err = opts.SetPublicKeyPEM([]byte(publicKey))
 	if err != nil {
@@ -225,7 +230,7 @@ func checkLatest() {
 		fmt.Printf("%s is the latest version!\n", conf.Version)
 	} else {
 		fmt.Printf("Need to download new version: %s\n", m.Version)
-		url := fmt.Sprintf("https://s3-us-west-2.amazonaws.com/update.hearthreplay.com/%s-%s-%s-%s", client_prog, runtime.GOOS, runtime.GOARCH, m.Version)
+		url := fmt.Sprintf("https://s3-us-west-2.amazonaws.com/update.hearthreplay.com/hearthreplay-client-%s-%s-%s", runtime.GOOS, runtime.GOARCH, m.Version)
 
 		resp, err = http.Get(url)
 
@@ -267,9 +272,6 @@ var (
 )
 
 const (
-	local_conf  = "config.json"
-	client_prog = "hearthreplay-client"
-
 	publicKey = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnFz67+ql0kCILF3Ns/Ua
 geKyrD1/SaQlfxSriP4PCErbZMa5HWBpaQxRKU+EGkxIQYzSEJlkCnajhXTLVIzJ
@@ -281,7 +283,19 @@ fQIDAQAB
 -----END PUBLIC KEY-----`
 )
 
+var (
+	client_prog = "hearthreplay-client"
+	local_conf  = "config.json"
+)
+
 func main() {
+	folder, err := osext.ExecutableFolder()
+	if err != nil {
+		panic(err)
+	}
+	client_prog = filepath.Join(folder, client_prog)
+	local_conf = filepath.Join(folder, local_conf)
+
 	fmt.Println("==================================")
 	fmt.Println("Hearthstone Replay Client Launcher")
 	fmt.Println("==================================")
@@ -290,18 +304,16 @@ func main() {
 	ok := checkHSConfig()
 	checkLatest()
 
-	if ok {
-		if err := exec.Command(fmt.Sprintf("./%s", client_prog)).Start(); err != nil {
-			panic(err)
-		}
-	} else {
+	if !ok {
 		fmt.Println()
 		fmt.Println("==================================")
 		fmt.Println("Logging setup for future sessions.")
 		fmt.Println("No games to be uploaded this time.")
 		fmt.Println("==================================")
 		fmt.Println()
-		fmt.Println("Press Enter to Continue.")
-		_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
+	} else {
+		if err := exec.Command(client_prog).Start(); err != nil {
+			fmt.Println(err)
+		}
 	}
 }

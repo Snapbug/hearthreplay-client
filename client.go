@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/icub3d/graceful"
+	"github.com/kardianos/osext"
 
 	"bitbucket.org/snapbug/hsr/client/linejoin"
 	"bitbucket.org/snapbug/hsr/client/location"
@@ -427,8 +428,17 @@ var (
 		"HERO_09":  "Anduin Wrynn",
 	}
 )
+var (
+	local_conf = "config.json"
+)
 
 func main() {
+	root, err := osext.ExecutableFolder()
+	if err != nil {
+		panic(err)
+	}
+
+	local_conf = filepath.Join(root, local_conf)
 	cf, err := os.Open(local_conf)
 
 	if err != nil {
@@ -497,10 +507,6 @@ func main() {
 		panic(err)
 	}
 }
-
-const (
-	local_conf = "config.json"
-)
 
 func writeLocalConfig() {
 	cf, err := os.Create(local_conf)

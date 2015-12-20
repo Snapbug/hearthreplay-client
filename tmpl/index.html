@@ -50,6 +50,9 @@ serversocket.onmessage = function(e) {
 		}
 	}
 };
+serversocket.onclose = function(e) {
+	$('#footer').append($('<h3>').text("Finished"));
+};
 		</script>
 	</head>
 	<body>
@@ -84,6 +87,8 @@ serversocket.onmessage = function(e) {
 				<tbody id="games">
 				</tbody>
 			</table>
+			<div id="footer" class="text-center">
+			</div>
 		</div>
 	</body>
 </html>
