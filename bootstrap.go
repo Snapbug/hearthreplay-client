@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/base64"
 	"encoding/hex"
@@ -38,48 +39,57 @@ func header(h string) {
 	fmt.Println(strings.Repeat("-", len(h)))
 }
 
-func writeLocalConfig() {
+func writeLocalConfig() bool {
 	cf, err := os.Create(local_conf)
 	if err != nil {
-		panic(err)
+		fmt.Printf("%#v", err)
+		return false
 	}
 	b, err := json.MarshalIndent(conf, "", "\t")
 	if err != nil {
-		panic(err)
+		fmt.Printf("%#v", err)
+		return false
 	}
 	fmt.Fprintf(cf, "%s", b)
 	if err = cf.Close(); err != nil {
-		panic(err)
+		fmt.Printf("%#v", err)
+		return false
 	}
+	return true
 }
 
-func checkLocalConfig() {
+func checkLocalConfig() bool {
 	header("Checking HSR client config")
 	cf, err := os.Open(local_conf)
 
 	if os.IsNotExist(err) {
 		fmt.Printf("Determining install location:\n")
 		if conf.Install, err = location.Location(); err != nil {
-			panic(err)
+			fmt.Printf("%#v", err)
+			return false
 		}
 		writeLocalConfig()
 
 		if cf, err = os.Open(local_conf); err != nil {
-			panic(err)
+			fmt.Printf("%#v", err)
+			return false
 		}
 	} else if err != nil {
-		panic(err)
+		fmt.Printf("%#v", err)
+		return false
 	} else {
 		fmt.Printf("Already determined install location:\n")
 	}
 	defer cf.Close()
 
 	if err = json.NewDecoder(cf).Decode(&conf); err != nil {
-		panic(err)
+		fmt.Printf("%#v", err)
+		return false
 	}
 
 	fmt.Printf("\tLog folder: %#s\n", conf.Install.LogFolder)
 	fmt.Printf("\tHS log config: %#s\n", conf.Install.Config)
+	return true
 }
 
 type HSConfigSection struct {
@@ -105,7 +115,8 @@ func checkHSConfig() (ok bool) {
 		}
 		ok = false
 	} else if err != nil {
-		panic(err)
+		fmt.Printf("%#v", err)
+		return false
 	} else {
 		cf, _ := mini.LoadConfigurationFromReader(hslog)
 		for _, section := range cf.SectionNames() {
@@ -141,7 +152,8 @@ func checkHSConfig() (ok bool) {
 	sort.Strings(sections)
 
 	if hslog, err = os.Create(conf.Install.Config); err != nil {
-		panic(err)
+		fmt.Printf("%#v", err)
+		return false
 	}
 	for _, k := range sections {
 		fmt.Fprintf(hslog, "[%s]\n%s\n", k, hsConf[k])
@@ -162,23 +174,25 @@ func verifiedUpdate(binary io.Reader, givenUpdate VersionUpdate) (err error) {
 		if os.IsNotExist(err) {
 			f, err = os.Create(client_prog)
 			if err != nil {
-				panic(err)
+				fmt.Printf("%#v", err)
+				return err
 			}
 		} else {
-			panic(err)
+			fmt.Printf("%#v", err)
+			return err
 		}
 	}
 	if runtime.GOOS == "darwin" {
 		stat, err := f.Stat()
 		if err != nil {
-			n, _ := err.(*os.PathError)
-			fmt.Printf("%#v\n", n)
-			panic(err)
+			fmt.Printf("%#v", err)
+			return err
 		}
 		current := stat.Mode()
 		current |= 0111 // set executable bits
 		if err := f.Chmod(current); err != nil {
-			panic(err)
+			fmt.Printf("%#v", err)
+			return err
 		}
 	}
 	f.Close()
@@ -209,13 +223,14 @@ func verifiedUpdate(binary io.Reader, givenUpdate VersionUpdate) (err error) {
 	return
 }
 
-func checkLatest() {
+func checkLatest() bool {
 	var m VersionUpdate
 	header("Checking version of client")
 
 	resp, err := http.Get(update_url)
 	if err != nil {
-		panic(err)
+		fmt.Printf("%#v", err)
+		return false
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -223,7 +238,8 @@ func checkLatest() {
 	}
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		panic(fmt.Sprintf("%#v", err))
+		fmt.Printf("%#v", err)
+		return false
 	}
 	err = json.Unmarshal(body, &m)
 
@@ -236,12 +252,13 @@ func checkLatest() {
 		resp, err = http.Get(url)
 
 		if err != nil {
-			panic(err)
+			fmt.Printf("%#v", err)
+			return false
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			fmt.Printf("Update server returned bad status: %s\n", resp.Status)
-			return
+			return false
 		}
 
 		i, _ := strconv.Atoi(resp.Header.Get("Content-Length"))
@@ -255,13 +272,17 @@ func checkLatest() {
 		io.Copy(writer, resp.Body)
 		err := verifiedUpdate(&buf, m)
 		if err != nil {
-			panic(err)
+			fmt.Printf("%#v", err)
+			return false
 		}
 		bar.Finish()
 
 		conf.Version = m.Version
-		writeLocalConfig()
+		if ok := writeLocalConfig(); !ok {
+			return false
+		}
 	}
+	return true
 }
 
 var (
@@ -292,19 +313,21 @@ var (
 func main() {
 	folder, err := osext.ExecutableFolder()
 	if err != nil {
-		panic(err)
+		fmt.Printf("%#v", err)
+		return
 	}
 	client_prog = strings.Trim(client_prog, "'")
 	client_prog = filepath.Join(folder, client_prog)
+	if runtime.GOOS == "windows" {
+		client_prog = fmt.Sprintf("%s.exe", client_prog)
+	}
 	local_conf = filepath.Join(folder, local_conf)
 
 	fmt.Println("==================================")
 	fmt.Println("Hearthstone Replay Client Launcher")
 	fmt.Println("==================================")
 
-	checkLocalConfig()
-	ok := checkHSConfig()
-	checkLatest()
+	ok := checkLocalConfig() && checkHSConfig() && checkLatest()
 
 	if !ok {
 		fmt.Println()
@@ -317,5 +340,10 @@ func main() {
 		if err := exec.Command(client_prog).Start(); err != nil {
 			fmt.Println(err)
 		}
+	}
+
+	if runtime.GOOS == "windows" {
+		reader := bufio.NewReader(os.Stdin)
+		_, _ = reader.ReadString('\n')
 	}
 }
