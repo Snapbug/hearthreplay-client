@@ -1,28 +1,33 @@
 package location
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
-	"unsafe"
+	"strings"
+
+	"golang.org/x/sys/windows/registry"
 )
 
 func Location() (loc SetupLocation, err error) {
-	var handle syscall.Handle
-	path := `SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Hearthstone`
-	err = syscall.RegOpenKeyEx(syscall.HKEY_LOCAL_MACHINE, syscall.StringToUTF16Ptr(path), 0, syscall.KEY_READ, &handle)
+	var s string
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Hearthstone`, registry.QUERY_VALUE)
 	if err != nil {
-		return
+		defer k.Close()
+		s, _, err = k.GetStringValue("DisplayIcon")
 	}
-	defer syscall.RegCloseKey(handle)
-	var typ uint32
-	var buffer [syscall.MAX_LONG_PATH]uint16
-	n := uint32(len(buffer))
-	err = syscall.RegQueryValueEx(handle, syscall.StringToUTF16Ptr("InstallLocation"), nil, &typ, (*byte)(unsafe.Pointer(&buffer[0])), &n)
 	if err != nil {
-		return
+		k, err = registry.OpenKey(registry.CURRENT_USER, `SOFTWARE\Microsoft\IntelliPoint\AppSpecific\Hearthstone.exe`, registry.QUERY_VALUE)
+		if err != nil {
+			defer k.Close()
+			s, _, err = k.GetStringValue("Path")
+			if err != nil {
+				fmt.Printf("Could not determine location")
+			}
+		}
 	}
-	root := syscall.UTF16ToString(buffer[:])
+
+	root := strings.TrimSuffix(s, "Hearthstone.exe")
 
 	loc.LogFolder = filepath.Join(root, "Logs")
 	loc.Config = filepath.Join(os.ExpandEnv("$LOCALAPPDATA"), "Blizzard", "Hearthstone", "log.config")
