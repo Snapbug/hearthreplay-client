@@ -152,12 +152,15 @@ var (
 func getLogs(logfolder string) chan Log {
 	x := make(chan Log)
 
+	fmt.Printf("%s:\n", logfolder)
 	filenames := make([]string, 0)
 	for _, f := range []string{"Power", "Net", "LoadingScreen", "UpdateManager"} {
+		fmt.Printf("%s::\n", f)
 		for _, suf := range []string{"", "_old"} {
 			fn := fmt.Sprintf("%s%s.log", f, suf)
 			p := filepath.Join(logfolder, fn)
 			if _, err := os.Stat(p); os.IsNotExist(err) {
+				fmt.Printf("%s: %#v\n", p, err)
 				continue
 			} else {
 				filenames = append(filenames, filepath.Join(logfolder, fn))
