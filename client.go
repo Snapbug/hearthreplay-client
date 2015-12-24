@@ -457,7 +457,7 @@ func main() {
 	if Version != "" && Version != conf.Version {
 		panic("Version mismatch")
 	}
-	p.Version = Version //conf.Version
+	p.Version = Version
 	p.Player = conf.Player
 
 	if Version == "" {

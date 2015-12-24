@@ -29,7 +29,7 @@ env=windows
 for arch in amd64 386
 do
 	echo Building client for ${env} ${arch}
-	GOOS=${env} GOARCH=${arch} godep go build -o out/${SHA}/${ROOT}-${env}-${arch}-${SHA} -ldflags "-s -H windowsgui -X main.version=${SHA}" client.go bindata.go
+	GOOS=${env} GOARCH=${arch} godep go build -o out/${SHA}/${ROOT}-${env}-${arch}-${SHA} -ldflags "-s -X main.Version=${SHA}" client.go bindata.go
 	doclient ${env} ${arch} ${SHA}
 done
 
