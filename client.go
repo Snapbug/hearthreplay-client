@@ -166,6 +166,8 @@ func getLogs(logfolder string) chan Log {
 		}
 	}
 
+	fmt.Printf("Looking at logs: %#v", filenames)
+
 	go func(filenames []string) {
 		send_log := func(log Log, x chan Log) {
 			if log.p1.Hero == log.heros[0] {
@@ -359,7 +361,6 @@ func logServer(logFolder string) func(ws *websocket.Conn) {
 		}
 		wg.Wait()
 		ws.Close()
-		os.Exit(0)
 	}
 }
 
