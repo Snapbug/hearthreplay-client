@@ -191,11 +191,7 @@ func getLogs(logfolder string) chan Log {
 				log.Playrs["remote"] = log.p1
 			}
 
-			p := strings.Split(log.Type, "_")
-			for i, _ := range p {
-				p[i] = strings.Title(strings.ToLower(p[i]))
-			}
-			log.Type = strings.Join(p, " ")
+			log.Type = gameTypeMap[log.Type]
 			x <- log
 		}
 
@@ -434,6 +430,12 @@ var (
 )
 var (
 	local_conf = "config.json"
+
+	gameTypeMap = map[string]string{
+		"TAVERN_BRAWL": "Tavern Brawl",
+		"TOURNAMENT":   "Ladder/Casual",
+		"ARENA":        "Arena",
+	}
 )
 
 func main() {
