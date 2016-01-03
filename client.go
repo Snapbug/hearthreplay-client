@@ -196,6 +196,7 @@ func getLogs(logfolder string) chan Log {
 			if log.Uploader == "0" {
 				log.Status = "Failed"
 				log.Reason = "Spectated Game"
+				log.Type = "Spectated"
 			}
 			x <- log
 		}
