@@ -78,6 +78,7 @@ type Log struct {
 	local     string
 	heros     []string
 	heros_cid [2]string
+	spectate  bool
 
 	data bytes.Buffer
 }
@@ -173,6 +174,9 @@ func getLogs(logfolder string) chan Log {
 
 	go func(filenames []string) {
 		send_log := func(log Log, x chan Log) {
+			if log.spectate {
+				return
+			}
 			if log.p1.Hero == log.heros[0] {
 				log.p1.Hero = HeroClass[log.heros_cid[0]]
 				log.p2.Hero = HeroClass[log.heros_cid[1]]
@@ -284,6 +288,9 @@ func getLogs(logfolder string) chan Log {
 				} else {
 					log.local = "2"
 				}
+			}
+			if strings.Contains(line.Text, "Begin Spectating") {
+				log.spectate = true
 			}
 
 			if gameServer.MatchString(line.Text) {
