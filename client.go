@@ -355,7 +355,7 @@ func logServer(logFolder string) func(ws *websocket.Conn) {
 	return func(ws *websocket.Conn) {
 		var wg sync.WaitGroup
 		for log := range getLogs(logFolder) {
-			if conf.Player == "" {
+			if conf.Player == "" && log.Uploader != "0" {
 				conf.Player = log.Uploader
 				writeLocalConfig()
 			}
