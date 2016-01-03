@@ -62,11 +62,32 @@ func checkLocalConfig() bool {
 	header("Checking HSR client config")
 	cf, err := os.Open(local_conf)
 
+	suffix := ".app"
+	if runtime.GOOS == "windows" {
+		suffix = ".exe"
+	}
+	suffix = fmt.Sprintf("Hearthstone%s", suffix)
+
 	if os.IsNotExist(err) {
 		fmt.Printf("Determining install location:\n")
 		if conf.Install, err = location.Location(); err != nil {
-			fmt.Printf("%#v", err)
-			return false
+			fmt.Printf("Could not determine location automatically\n")
+			reader := bufio.NewScanner(os.Stdin)
+			fmt.Println("Please enter it: ")
+			for reader.Scan() {
+				path := filepath.Clean(reader.Text())
+				if !strings.HasSuffix(path, suffix) {
+					path = filepath.Join(path, suffix)
+				}
+				_, err = os.Stat(path)
+				if err != nil {
+					fmt.Printf("Invalid location, tried %s\n", filepath.Dir(path))
+					fmt.Println("Please enter it again:")
+				} else {
+					conf.Install.LogFolder = filepath.Dir(path)
+					break
+				}
+			}
 		}
 		writeLocalConfig()
 
