@@ -18,15 +18,24 @@ serversocket.onmessage = function(e) {
 	var d = JSON.parse(e.data);
 	var x = $('#' + d.Key);
 	if (x.length) {
-		var html = "";
-		if (d.Status == "Success") {
-			html = '<span class="text-success"><i class="fa fa-check"></i></span>&nbsp;<small>(<a href="https://hearthreplay.com/g/' + d.Uploader + '/' + d.Key + '/">view</a>)</small>';
-		} else {
-			html = '<span class="text-danger"><i class="fa fa-close"></i>&nbsp;' + d.Reason + '</span>';
-			if (d.Status == "Skipped") {
-				html += '&nbsp;<small>(<a href="https://hearthreplay.com/g/' + d.Uploader + '/' + d.Key + '/">view</a>)</small>';
-			}
+		var html = "",
+			cl = "danger",
+			icon = "close",
+			content = d.Reason,
+			link = '<a href="https://hearthreplay.com/g/' + d.Uploader + '/' + d.Key + '/">view</a>';
+		switch (d.Status) {
+			case "Success":
+				cl = "success";
+				icon = "check";
+				content = link;
+				break;
+			case "Skipped":
+				cl = "warning";
+				icon = "check";
+				content = 'Already Uploaded:&nbsp;' + link;
+				break;
 		}
+		html = '<span class="text-' + cl +'"><i class="fa fa-' + icon + '"></i>&nbsp;' + content + '</span>';
 		$('#' + d.Key + '-status').html(html);
 	} else {
 		var tr = $('<tr>').attr('id', d.Key);
