@@ -191,7 +191,7 @@ func getLogs(logfolder string) chan Log {
 				log.Playrs["remote"] = log.p1
 			}
 
-			if ty, ok = gameTypeMap[log.Type]; ok {
+			if ty, ok := gameTypeMap[log.Type]; ok {
 				log.Type = ty
 			}
 			x <- log
