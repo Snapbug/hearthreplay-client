@@ -170,13 +170,8 @@ func getLogs(logfolder string) chan Log {
 		}
 	}
 
-	fmt.Printf("Looking at logs: %#v", filenames)
-
 	go func(filenames []string) {
 		send_log := func(log Log, x chan Log) {
-			if log.spectate {
-				return
-			}
 			if log.p1.Hero == log.heros[0] {
 				log.p1.Hero = HeroClass[log.heros_cid[0]]
 				log.p2.Hero = HeroClass[log.heros_cid[1]]
@@ -197,6 +192,10 @@ func getLogs(logfolder string) chan Log {
 
 			if ty, ok := gameTypeMap[log.Type]; ok {
 				log.Type = ty
+			}
+			if log.Uploader == "0" {
+				log.Status = "Failed"
+				log.Reason = "Spectated Game"
 			}
 			x <- log
 		}
@@ -289,9 +288,6 @@ func getLogs(logfolder string) chan Log {
 					log.local = "2"
 				}
 			}
-			if strings.Contains(line.Text, "Begin Spectating") {
-				log.spectate = true
-			}
 
 			if gameServer.MatchString(line.Text) {
 				gs := gameServer.NamedMatches(line.Text)
@@ -349,7 +345,6 @@ func getLogs(logfolder string) chan Log {
 		if found_log {
 			send_log(log, x)
 		}
-
 		close(x)
 	}(filenames)
 	return x
@@ -363,8 +358,10 @@ func logServer(logFolder string) func(ws *websocket.Conn) {
 				conf.Player = log.Uploader
 				writeLocalConfig()
 			}
-			wg.Add(1)
-			go upload(log, ws, &wg)
+			if log.Uploader != "0" {
+				wg.Add(1)
+				go upload(log, ws, &wg)
+			}
 			send(ws, log)
 		}
 		wg.Wait()
