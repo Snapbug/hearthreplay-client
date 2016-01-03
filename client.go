@@ -191,7 +191,9 @@ func getLogs(logfolder string) chan Log {
 				log.Playrs["remote"] = log.p1
 			}
 
-			log.Type = gameTypeMap[log.Type]
+			if ty, ok = gameTypeMap[log.Type]; ok {
+				log.Type = ty
+			}
 			x <- log
 		}
 
@@ -432,9 +434,10 @@ var (
 	local_conf = "config.json"
 
 	gameTypeMap = map[string]string{
+		"ARENA":        "Arena",
+		"FRIENDLY":     "Friendly",
 		"TAVERN_BRAWL": "Tavern Brawl",
 		"TOURNAMENT":   "Ladder/Casual",
-		"ARENA":        "Arena",
 	}
 )
 
@@ -463,7 +466,6 @@ func main() {
 	p.Player = conf.Player
 
 	if Version == "" {
-		conf.Install.LogFolder = "/Users/mcrane/Dropbox/HSLOG/2"
 		p.Version = "testing"
 	}
 
@@ -479,11 +481,6 @@ func main() {
 	})
 
 	http.HandleFunc("/", make_tmpl_handler("index"))
-	http.HandleFunc("/changelog", make_tmpl_handler("changelog"))
-	http.HandleFunc("/quit", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
-
 	http.Handle("/logs", websocket.Handler(logServer(conf.Install.LogFolder)))
 
 	fmt.Printf("Listening on: %s\n", listener.Addr())

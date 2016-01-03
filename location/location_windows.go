@@ -27,9 +27,18 @@ func Location() (loc SetupLocation, err error) {
 		}
 	}
 
-	root := strings.TrimSuffix(s, "Hearthstone.exe")
-
-	loc.LogFolder = filepath.Join(root, "Logs")
+	if err == nil {
+		root := strings.TrimSuffix(s, "Hearthstone.exe")
+		loc.LogFolder = filepath.Join(root, "Logs")
+	} else {
+		// finally try to stat a well known path
+		fi, ierr := os.Stat(filepath.Join("C:", "Program Files (x86)", "Hearthstone", "Hearthstone.exe"))
+		if ierr == nil {
+			loc.LogFolder = filepath.Dir(fi.Name())
+		} else {
+			err = ierr
+		}
+	}
 	loc.Config = filepath.Join(os.ExpandEnv("$LOCALAPPDATA"), "Blizzard", "Hearthstone", "log.config")
 	return
 }
