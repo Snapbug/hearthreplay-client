@@ -58,7 +58,7 @@ serversocket.onmessage = function(e) {
 		}
 
 		$('#games').prepend(tr);
-		if ($('#user_header').children().length == 0) {
+		if ($('#user_header').children().length === 0 && d.Status === 'Uploading') {
 			$('#user_header').html('<a href="https://hearthreplay.com/g/' + d.Uploader + '/">View List of Your Games</a>');
 		}
 	}
