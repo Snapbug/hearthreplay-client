@@ -440,6 +440,7 @@ var (
 
 	gameTypeMap = map[string]string{
 		"ARENA":        "Arena",
+		"DRAFT":        "Arena",
 		"FRIENDLY":     "Friendly",
 		"TAVERN_BRAWL": "Tavern Brawl",
 		"TOURNAMENT":   "Ladder/Casual",
