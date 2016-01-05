@@ -101,7 +101,7 @@ func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 	resp, err := http.Head(path)
 
 	if err != nil {
-		// fmt.Printf("head failed: %#v\n", err)
+		fmt.Printf("head failed: %#v\n", err)
 	} else if resp.StatusCode == http.StatusOK {
 		l.Status = "Skipped"
 		l.Reason = "Already Uploaded"
@@ -109,7 +109,7 @@ func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 		// fmt.Printf("Already uploaded %s/%s -- skipping\n", l.Uploader, l.Key)
 		return
 	} else {
-		// fmt.Printf("head failed: %#v\n", resp)
+		fmt.Printf("head failed: %#v\n", resp)
 	}
 
 	var y bytes.Buffer
