@@ -106,7 +106,7 @@ func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 		l.Status = "Skipped"
 		l.Reason = "Already Uploaded"
 		send(ws, l)
-		// fmt.Printf("Already uploaded %s/%s -- skipping\n", l.Uploader, l.Key)
+		fmt.Printf("Already uploaded %s/%s -- skipping\n", l.Uploader, l.Key)
 		return
 	} else {
 		fmt.Printf("head failed: %#v\n", resp)
@@ -169,6 +169,7 @@ func getLogs(logfolder string) chan Log {
 			break
 		}
 	}
+	fmt.Printf("%#v\n", filenames)
 
 	go func(filenames []string) {
 		send_log := func(log Log, x chan Log) {
@@ -217,76 +218,71 @@ func getLogs(logfolder string) chan Log {
 				p := gameVersion.NamedMatches(line.Text)
 				version = p["version"]
 				versionLine = line.Text
-			}
-			if screenTransition.MatchString(line.Text) {
+			} else if screenTransition.MatchString(line.Text) {
 				trans := screenTransition.NamedMatches(line.Text)
 				gameTypeLine = line.Text
 				gameType = trans["curr"]
 			}
-			if player.MatchString(line.Text) {
-				parts := player.NamedMatches(line.Text)
-				if log.p1.Name == "" {
-					log.p1.Name = parts["name"]
-				} else {
-					log.p2.Name = parts["name"]
-				}
-			}
-			if first.MatchString(line.Text) {
-				parts := first.NamedMatches(line.Text)
-				if log.p1.Name == parts["name"] {
-					log.p1.First = true
-				} else {
-					log.p2.First = true
-				}
-			}
-			if hent.MatchString(line.Text) {
-				parts := hent.NamedMatches(line.Text)
-				if log.p1.Name == parts["name"] {
-					if log.p1.Hero == "" {
-						log.p1.Hero = parts["hid"]
+			if strings.Contains(line.Text, "GameState") {
+				if player.MatchString(line.Text) {
+					parts := player.NamedMatches(line.Text)
+					if log.p1.Name == "" {
+						log.p1.Name = parts["name"]
+					} else {
+						log.p2.Name = parts["name"]
 					}
-				} else {
-					if log.p2.Hero == "" {
-						log.p2.Hero = parts["hid"]
+				} else if first.MatchString(line.Text) {
+					parts := first.NamedMatches(line.Text)
+					if log.p1.Name == parts["name"] {
+						log.p1.First = true
+					} else {
+						log.p2.First = true
 					}
-				}
-			}
-			if hero.MatchString(line.Text) {
-				p := hero.NamedMatches(line.Text)
-				log.heros = append(log.heros, p["id"])
-			}
-			if create.MatchString(line.Text) {
-				p := create.NamedMatches(line.Text)
-				if p["id"] == log.heros[0] {
-					log.heros_cid[0] = p["cid"]
-				} else if p["id"] == log.heros[1] {
-					log.heros_cid[1] = p["cid"]
-				}
-			}
-			if winner.MatchString(line.Text) {
-				p := winner.NamedMatches(line.Text)
-				if log.p1.Name == p["name"] {
-					log.p1.Winner = true
-				} else {
-					log.p2.Winner = true
-				}
-				log.Finish = line.Ts
-				log.Duration = log.Finish.Sub(log.Start)
-			}
-			if id.MatchString(line.Text) {
-				p := id.NamedMatches(line.Text)
-				if log.p1.Name == p["name"] {
-					log.p1.ID = p["id"]
-				} else {
-					log.p2.ID = p["id"]
-				}
-			}
-			if local.MatchString(line.Text) {
-				p := local.NamedMatches(line.Text)
-				if log.p1.ID == p["id"] {
-					log.local = "1"
-				} else {
-					log.local = "2"
+				} else if hent.MatchString(line.Text) {
+					parts := hent.NamedMatches(line.Text)
+					if log.p1.Name == parts["name"] {
+						if log.p1.Hero == "" {
+							log.p1.Hero = parts["hid"]
+						}
+					} else {
+						if log.p2.Hero == "" {
+							log.p2.Hero = parts["hid"]
+						}
+					}
+				} else if hero.MatchString(line.Text) {
+					p := hero.NamedMatches(line.Text)
+					log.heros = append(log.heros, p["id"])
+					fmt.Println(line.Text)
+				} else if create.MatchString(line.Text) {
+					p := create.NamedMatches(line.Text)
+					if p["id"] == log.heros[0] {
+						log.heros_cid[0] = p["cid"]
+					} else if p["id"] == log.heros[1] {
+						log.heros_cid[1] = p["cid"]
+					}
+				} else if winner.MatchString(line.Text) {
+					p := winner.NamedMatches(line.Text)
+					if log.p1.Name == p["name"] {
+						log.p1.Winner = true
+					} else {
+						log.p2.Winner = true
+					}
+					log.Finish = line.Ts
+					log.Duration = log.Finish.Sub(log.Start)
+				} else if id.MatchString(line.Text) {
+					p := id.NamedMatches(line.Text)
+					if log.p1.Name == p["name"] {
+						log.p1.ID = p["id"]
+					} else {
+						log.p2.ID = p["id"]
+					}
+				} else if local.MatchString(line.Text) {
+					p := local.NamedMatches(line.Text)
+					if log.p1.ID == p["id"] {
+						log.local = "1"
+					} else {
+						log.local = "2"
+					}
 				}
 			}
 
@@ -313,7 +309,7 @@ func getLogs(logfolder string) chan Log {
 					}
 				}
 				if debug != "" {
-					dbgout, err = os.Create(fmt.Sprintf("out/%s.%s.%s.(%s).log", gs["client"], gs["game"], gs["key"], gameType))
+					dbgout, err = os.Create(fmt.Sprintf("logs/%s.%s.%s.(%s).log", gs["client"], gs["game"], gs["key"], gameType))
 					if err != nil {
 						panic(err)
 					}
@@ -367,6 +363,7 @@ func logServer(logFolder string) func(ws *websocket.Conn) {
 		}
 		wg.Wait()
 		ws.Close()
+		os.Exit(0)
 	}
 }
 
