@@ -436,6 +436,7 @@ var (
 	local_conf = "config.json"
 
 	gameTypeMap = map[string]string{
+		"ADVENTURE":    "Adventure",
 		"ARENA":        "Arena",
 		"DRAFT":        "Arena",
 		"FRIENDLY":     "Friendly",
