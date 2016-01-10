@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -42,8 +43,8 @@ func (fl *FileAndLine) Update() bool {
 			time.Now().Location(),
 		)
 
-		// There was an issue with an NTP sync that caused a shift of a few seconds
-		// around 6pm, so check that it's 11pm -> 12am
+		// There was an issue with an NTP sync that caused a back shift
+		// of a few seconds so check that it's 11pm -> 12am
 		if fl.Ts.Before(old_time) && fl.Ts.Hour() == 0 && old_time.Hour() == 23 {
 			fl.base = fl.base.Add(time.Duration(24) * time.Hour)
 			fl.Ts = fl.Ts.Add(time.Duration(24) * time.Hour)
@@ -83,7 +84,7 @@ func NewJoiner(filenames []string) chan FileAndLine {
 
 		for logsandlines.Len() > 0 {
 			sort.Sort(logsandlines)
-			x <- FileAndLine{Ts: logsandlines[0].Ts, Text: logsandlines[0].Text}
+			x <- FileAndLine{Ts: logsandlines[0].Ts, Text: logsandlines[0].Text, File: filepath.Base(logsandlines[0].File)}
 			if !logsandlines[0].Update() {
 				logsandlines = logsandlines[1:]
 			}
