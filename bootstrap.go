@@ -124,6 +124,10 @@ func (h HSConfigSection) String() string {
 	return fmt.Sprintf("LogLevel=%d\nFilePrinting=%v\nConsolePrinting=%v\nScreenPrinting=%v\n", h.LogLevel, h.FilePrinting, h.ConsolePrinting, h.ScreenPrinting)
 }
 
+var (
+	conf_sections = []string{"Asset", "Bob", "Net", "Power", "LoadingScreen", "UpdateManager"}
+)
+
 func checkHSConfig() (ok bool) {
 	header("Setting up HS logging")
 	ok = true
@@ -131,7 +135,7 @@ func checkHSConfig() (ok bool) {
 	hslog, err := os.Open(conf.Install.Config)
 	if os.IsNotExist(err) {
 		fmt.Printf("HS log configuration did not exist, creating.\n")
-		for _, section := range []string{"Power", "Net", "LoadingScreen", "UpdateManager"} {
+		for _, section := range conf_sections {
 			hsConf[section] = needed
 		}
 		ok = false
@@ -146,7 +150,7 @@ func checkHSConfig() (ok bool) {
 			hsConf[section] = sec
 		}
 
-		for _, section := range []string{"Power", "Net", "LoadingScreen", "UpdateManager"} {
+		for _, section := range conf_sections {
 			sec := HSConfigSection{}
 			k := cf.DataFromSection(section, &sec)
 			if !k {

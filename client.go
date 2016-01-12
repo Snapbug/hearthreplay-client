@@ -27,19 +27,22 @@ import (
 )
 
 var (
+	// these are used to get important information to show the client -- validated by the server
+	bobLine          = regexp.New(`play queue (?P<queue>\S+)$`)
+	assetLine        = regexp.New(`unloading name=Medal_Ranked_(?P<level>\d+)`)
 	gameVersion      = regexp.New(`gameVersion = (?P<version>\d+)`)
 	screenTransition = regexp.New(`OnSceneLoaded\(\) - prevMode=(?P<prev>\S+) currMode=(?P<curr>\S+)`)
 	gameServer       = regexp.New(`GotoGameServer -- address=(?P<ip>.+):(?P<port>\d+), game=(?P<game>\d+), client=(?P<client>\d+), spectateKey=(?P<key>.+)`)
 
-	player = regexp.New(`GameState[^_]+TAG_CHANGE Entity=(?P<name>.+) tag=PLAYSTATE value=PLAYING`)
-	first  = regexp.New(`GameState[^_]+TAG_CHANGE Entity=(?P<name>.+) tag=FIRST_PLAYER value=1`)
-	hent   = regexp.New(`GameState[^_]+TAG_CHANGE Entity=(?P<name>.+) tag=HERO_ENTITY value=(?P<hid>\d+)`)
-	winner = regexp.New(`GameState[^_]+TAG_CHANGE Entity=(?P<name>.+) tag=PLAYSTATE value=WON`)
-	id     = regexp.New(`GameState[^_]+TAG_CHANGE Entity=(?P<name>.+) tag=PLAYER_ID value=(?P<id>\d+)`)
-	local  = regexp.New(`SendChoices\(\) - id=(?P<id>\d+) ChoiceType=MULLIGAN`)
-
-	hero   = regexp.New(`GameState[^_]+tag=HERO_ENTITY value=(?P<id>\d+)`)
+	// these are used to show the client something -- unvalidated by the server, but extracted from logs
+	player = regexp.New(`TAG_CHANGE Entity=(?P<name>.+) tag=PLAYSTATE value=PLAYING`)
+	first  = regexp.New(`TAG_CHANGE Entity=(?P<name>.+) tag=FIRST_PLAYER value=1`)
+	hent   = regexp.New(`TAG_CHANGE Entity=(?P<name>.+) tag=HERO_ENTITY value=(?P<hid>\d+)`)
+	winner = regexp.New(`TAG_CHANGE Entity=(?P<name>.+) tag=PLAYSTATE value=WON`)
+	id     = regexp.New(`TAG_CHANGE Entity=(?P<name>.+) tag=PLAYER_ID value=(?P<id>\d+)`)
+	hero   = regexp.New(`tag=HERO_ENTITY value=(?P<id>\d+)`)
 	create = regexp.New(` - FULL_ENTITY - Creating ID=(?P<id>\d+) CardID=(?P<cid>.*)`)
+	local  = regexp.New(`SendChoices\(\) - id=(?P<id>\d+) ChoiceType=MULLIGAN`)
 )
 
 type Player struct {
@@ -155,7 +158,7 @@ func getLogs(logfolder string) chan Log {
 
 	fmt.Printf("%s:\n", logfolder)
 	filenames := make([]string, 0)
-	for _, f := range []string{"Power", "Net", "LoadingScreen", "UpdateManager"} {
+	for _, f := range []string{"Asset", "Bob", "Net", "Power", "LoadingScreen", "UpdateManager"} {
 		fmt.Printf("%s::\n", f)
 		for _, suf := range []string{"", "_old"} {
 			fn := fmt.Sprintf("%s%s.log", f, suf)
@@ -209,6 +212,8 @@ func getLogs(logfolder string) chan Log {
 		var version string
 		var gameType string
 		var gameTypeLine string
+		var massetLine string
+		var mbobLine string
 
 		var log Log
 		var found_log bool
@@ -222,7 +227,24 @@ func getLogs(logfolder string) chan Log {
 				trans := screenTransition.NamedMatches(line.Text)
 				gameTypeLine = line.Text
 				gameType = trans["curr"]
+			} else if bobLine.MatchString(line.Text) {
+				mbobLine = line.Text
+			} else if assetLine.MatchString(line.Text) {
+				// might be multiple medals for cross-rank play so get the smallest
+				// a game between 4/5 is really a game for level 4
+				if massetLine != "" {
+					p1 := assetLine.NamedMatches(massetLine)
+					p2 := assetLine.NamedMatches(line.Text)
+					l1, _ := strconv.Atoi(p1["level"])
+					l2, _ := strconv.Atoi(p2["level"])
+					if l2 < l1 {
+						massetLine = line.Text
+					}
+				} else {
+					massetLine = line.Text
+				}
 			}
+
 			if strings.Contains(line.Text, "GameState") {
 				if player.MatchString(line.Text) {
 					parts := player.NamedMatches(line.Text)
@@ -315,18 +337,16 @@ func getLogs(logfolder string) chan Log {
 					}
 					fmt.Fprintf(dbgout, "%s\n", versionLine)
 					fmt.Fprintf(dbgout, "%s\n", gameTypeLine)
+					fmt.Fprintf(dbgout, "%s\n", massetLine)
+					fmt.Fprintf(dbgout, "%s\n", mbobLine)
 					fmt.Fprintf(dbgout, "%s\n", line.Text)
 				}
 
-				if _, err := log.data.WriteString(fmt.Sprintf("%s\n", versionLine)); err != nil {
-					panic(err)
-				}
-				if _, err := log.data.WriteString(fmt.Sprintf("%s\n", gameTypeLine)); err != nil {
-					panic(err)
-				}
-				if _, err := log.data.WriteString(fmt.Sprintf("%s\n", line.Text)); err != nil {
-					panic(err)
-				}
+				log.data.WriteString(fmt.Sprintf("%s\n", versionLine))
+				log.data.WriteString(fmt.Sprintf("%s\n", gameTypeLine))
+				log.data.WriteString(fmt.Sprintf("%s\n", line.Text))
+				log.data.WriteString(fmt.Sprintf("%s\n", massetLine))
+				log.data.WriteString(fmt.Sprintf("%s\n", mbobLine))
 			} else {
 				if strings.Contains(line.Text, "GameState") {
 					if debug != "" && dbgout != nil {
