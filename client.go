@@ -101,7 +101,7 @@ func send(ws *websocket.Conn, l Log) {
 func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	path := fmt.Sprintf("%s/g/%s/%s/", upload_url, l.Uploader, l.Key)
+	path := fmt.Sprintf("%s/g/%s/%s/v1", upload_url, l.Uploader, l.Key)
 
 	resp, err := http.Head(path)
 
