@@ -317,6 +317,7 @@ func getLogs(logfolder string) chan Log {
 				gs := gameServer.NamedMatches(line.Text)
 
 				if found_log {
+					ranklevel = ""
 					subtypeLine = ""
 					send_log(log, x)
 				}
@@ -342,16 +343,22 @@ func getLogs(logfolder string) chan Log {
 						panic(err)
 					}
 					fmt.Fprintf(dbgout, "%s\n", versionLine)
-					fmt.Fprintf(dbgout, "%s\n", subtypeLine)
+					if log.Type == "RANKED" {
+						fmt.Fprintf(dbgout, "%s\n", subtypeLine)
+					} else {
+						fmt.Fprintf(dbgout, "%s\n", gameTypeLine)
+					}
 					fmt.Fprintf(dbgout, "%s\n", line.Text)
-					fmt.Fprintf(dbgout, "%s\n", gameTypeLine)
 					fmt.Fprintf(dbgout, "%s\n", ranklevel)
 				}
 
 				log.data.WriteString(fmt.Sprintf("%s\n", versionLine))
-				log.data.WriteString(fmt.Sprintf("%s\n", subtypeLine))
+				if log.Type == "RANKED" {
+					log.data.WriteString(fmt.Sprintf("%s\n", subtypeLine))
+				} else {
+					log.data.WriteString(fmt.Sprintf("%s\n", gameTypeLine))
+				}
 				log.data.WriteString(fmt.Sprintf("%s\n", line.Text))
-				log.data.WriteString(fmt.Sprintf("%s\n", gameTypeLine))
 				log.data.WriteString(fmt.Sprintf("%s\n", ranklevel))
 			} else {
 				if strings.Contains(line.Text, "GameState") {
