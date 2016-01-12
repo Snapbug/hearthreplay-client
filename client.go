@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"text/template"
@@ -27,9 +28,10 @@ import (
 )
 
 var (
+	levelLine = regexp.New(`unloading name=Medal_Ranked_(?P<level>\d+)`)
+	typeLine  = `unloading name=RankChangeTwoScoop`
+
 	// these are used to get important information to show the client -- validated by the server
-	bobLine          = regexp.New(`play queue (?P<queue>\S+)$`)
-	assetLine        = regexp.New(`unloading name=Medal_Ranked_(?P<level>\d+)`)
 	gameVersion      = regexp.New(`gameVersion = (?P<version>\d+)`)
 	screenTransition = regexp.New(`OnSceneLoaded\(\) - prevMode=(?P<prev>\S+) currMode=(?P<curr>\S+)`)
 	gameServer       = regexp.New(`GotoGameServer -- address=(?P<ip>.+):(?P<port>\d+), game=(?P<game>\d+), client=(?P<client>\d+), spectateKey=(?P<key>.+)`)
@@ -212,8 +214,8 @@ func getLogs(logfolder string) chan Log {
 		var version string
 		var gameType string
 		var gameTypeLine string
-		var massetLine string
-		var mbobLine string
+		var subtypeLine string
+		var ranklevel string
 
 		var log Log
 		var found_log bool
@@ -226,22 +228,25 @@ func getLogs(logfolder string) chan Log {
 			} else if screenTransition.MatchString(line.Text) {
 				trans := screenTransition.NamedMatches(line.Text)
 				gameTypeLine = line.Text
-				gameType = trans["curr"]
-			} else if bobLine.MatchString(line.Text) {
-				mbobLine = line.Text
-			} else if assetLine.MatchString(line.Text) {
+				if subtypeLine == "" {
+					gameType = trans["curr"]
+				}
+			} else if strings.Contains(line.Text, typeLine) {
+				gameType = "RANKED"
+				subtypeLine = line.Text
+			} else if levelLine.MatchString(line.Text) {
 				// might be multiple medals for cross-rank play so get the smallest
 				// a game between 4/5 is really a game for level 4
-				if massetLine != "" {
-					p1 := assetLine.NamedMatches(massetLine)
-					p2 := assetLine.NamedMatches(line.Text)
+				if ranklevel != "" {
+					p1 := levelLine.NamedMatches(ranklevel)
+					p2 := levelLine.NamedMatches(line.Text)
 					l1, _ := strconv.Atoi(p1["level"])
 					l2, _ := strconv.Atoi(p2["level"])
 					if l2 < l1 {
-						massetLine = line.Text
+						ranklevel = line.Text
 					}
 				} else {
-					massetLine = line.Text
+					ranklevel = line.Text
 				}
 			}
 
@@ -312,6 +317,7 @@ func getLogs(logfolder string) chan Log {
 				gs := gameServer.NamedMatches(line.Text)
 
 				if found_log {
+					subtypeLine = ""
 					send_log(log, x)
 				}
 				log = Log{
@@ -336,17 +342,17 @@ func getLogs(logfolder string) chan Log {
 						panic(err)
 					}
 					fmt.Fprintf(dbgout, "%s\n", versionLine)
-					fmt.Fprintf(dbgout, "%s\n", gameTypeLine)
-					fmt.Fprintf(dbgout, "%s\n", massetLine)
-					fmt.Fprintf(dbgout, "%s\n", mbobLine)
+					fmt.Fprintf(dbgout, "%s\n", subtypeLine)
 					fmt.Fprintf(dbgout, "%s\n", line.Text)
+					fmt.Fprintf(dbgout, "%s\n", gameTypeLine)
+					fmt.Fprintf(dbgout, "%s\n", ranklevel)
 				}
 
 				log.data.WriteString(fmt.Sprintf("%s\n", versionLine))
-				log.data.WriteString(fmt.Sprintf("%s\n", gameTypeLine))
+				log.data.WriteString(fmt.Sprintf("%s\n", subtypeLine))
 				log.data.WriteString(fmt.Sprintf("%s\n", line.Text))
-				log.data.WriteString(fmt.Sprintf("%s\n", massetLine))
-				log.data.WriteString(fmt.Sprintf("%s\n", mbobLine))
+				log.data.WriteString(fmt.Sprintf("%s\n", gameTypeLine))
+				log.data.WriteString(fmt.Sprintf("%s\n", ranklevel))
 			} else {
 				if strings.Contains(line.Text, "GameState") {
 					if debug != "" && dbgout != nil {
@@ -461,7 +467,8 @@ var (
 		"DRAFT":        "Arena",
 		"FRIENDLY":     "Friendly",
 		"TAVERN_BRAWL": "Tavern Brawl",
-		"TOURNAMENT":   "Ladder/Casual",
+		"TOURNAMENT":   "Casual",
+		"RANKED":       "Ranked",
 	}
 )
 
