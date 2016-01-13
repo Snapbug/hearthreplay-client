@@ -365,9 +365,7 @@ func getLogs(logfolder string) chan Log {
 					if debug != "" && dbgout != nil {
 						fmt.Fprintf(dbgout, "%s\n", line.Text)
 					}
-					if _, err := log.data.WriteString(fmt.Sprintf("%s\n", line.Text)); err != nil {
-						panic(err)
-					}
+					log.data.WriteString(fmt.Sprintf("%s\n", line.Text))
 				}
 			}
 		}
@@ -465,6 +463,7 @@ var (
 		"HERO_09":  "Anduin Wrynn",
 	}
 )
+
 var (
 	local_conf = "config.json"
 
@@ -522,13 +521,6 @@ func main() {
 	http.Handle("/logs", websocket.Handler(logServer(conf.Install.LogFolder)))
 
 	fmt.Printf("Listening on: %s\n", listener.Addr())
-
-	// sigs := make(chan os.Signal)
-	// signal.Notify(sigs, syscall.SIGTERM)
-	// go func() {
-	// 	<-sigs
-	// 	s.Close()
-	// }()
 
 	go func() {
 		var err error
