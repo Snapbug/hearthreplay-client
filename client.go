@@ -102,7 +102,7 @@ func NewLog() Log {
 }
 
 const (
-	upload_url = "http://127.0.0.1:8080"
+	upload_url = "https://hearthreplay.com"
 )
 
 func send(ws *websocket.Conn, l Log) {
@@ -406,7 +406,7 @@ func logServer(logFolder string) func(ws *websocket.Conn) {
 			}
 			if log.Uploader != "0" {
 				wg.Add(1)
-				upload(log, ws, &wg)
+				go upload(log, ws, &wg)
 			}
 			send(ws, log)
 		}
