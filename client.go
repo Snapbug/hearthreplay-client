@@ -397,10 +397,10 @@ func logServer(logFolder string) func(ws *websocket.Conn) {
 				writeLocalConfig()
 			}
 			if log.Uploader != "0" {
-				// wg.Add(1)
-				// go upload(log, ws, &wg)
+				wg.Add(1)
+				go upload(log, ws, &wg)
 			}
-			// send(ws, log)
+			send(ws, log)
 		}
 		wg.Wait()
 		ws.Close()
