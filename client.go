@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"golang.org/x/net/websocket"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -65,15 +66,16 @@ func (p Player) String() string {
 }
 
 type Log struct {
-	Start    time.Time
-	Finish   time.Time
-	Duration time.Duration
-	Type     string
-	Version  string
-	Uploader string
-	Key      string
-	Data     []byte `json:"-"`
-	Playrs   map[string]Player
+	Start       time.Time
+	Finish      time.Time
+	Duration    time.Duration
+	Type        string
+	DisplayType string
+	Version     string
+	Uploader    string
+	Key         string
+	Data        []byte `json:"-"`
+	Playrs      map[string]Player
 
 	Status string
 	Reason string
@@ -86,6 +88,10 @@ type Log struct {
 	spectate  bool
 
 	data bytes.Buffer
+}
+
+func (l Log) String() string {
+	return fmt.Sprintf("%s vs %s %s(%s) %s/%s", l.p1, l.p2, l.DisplayType, l.Type, l.Uploader, l.Key)
 }
 
 const (
@@ -101,7 +107,7 @@ func send(ws *websocket.Conn, l Log) {
 func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	path := fmt.Sprintf("%s/g/%s/%s/v1", upload_url, l.Uploader, l.Key)
+	path := fmt.Sprintf("%s/g/%s/%s/", upload_url, l.Uploader, l.Key)
 
 	resp, err := http.Head(path)
 
@@ -136,14 +142,18 @@ func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 		panic(err)
 	}
 
+	path = fmt.Sprintf("%sv1", path)
 	resp, err = http.Post(path, "appliation/octet-stream", &x)
 
+	fmt.Printf("%s\n", l)
 	if err != nil {
 		l.Status = "Failed"
 		l.Reason = fmt.Sprintf("Error contacting server: %s", err)
 	} else if resp.StatusCode != http.StatusAccepted {
 		l.Status = "Failed"
 		l.Reason = fmt.Sprintf("Server returned: %d. Report %s/%s", resp.StatusCode, l.Uploader, l.Key)
+		b, _ := ioutil.ReadAll(resp.Body)
+		fmt.Printf("%s", b)
 	} else {
 		l.Status = "Success"
 		l.Reason = fmt.Sprintf("View at: %s/g/%s/%s/", upload_url, l.Uploader, l.Key)
@@ -197,12 +207,12 @@ func getLogs(logfolder string) chan Log {
 			}
 
 			if ty, ok := gameTypeMap[log.Type]; ok {
-				log.Type = ty
+				log.DisplayType = ty
 			}
 			if log.Uploader == "0" {
 				log.Status = "Failed"
 				log.Reason = "Spectated Game"
-				log.Type = "Spectated"
+				log.DisplayType = "Spectated"
 			}
 			x <- log
 		}
