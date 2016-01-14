@@ -102,7 +102,7 @@ func NewLog() Log {
 }
 
 const (
-	upload_url = "https://hearthreplay.com"
+	upload_url = "http://127.0.0.1:8080"
 )
 
 func send(ws *websocket.Conn, l Log) {
@@ -127,7 +127,7 @@ func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 		fmt.Printf("Already uploaded %s/%s -- skipping\n", l.Uploader, l.Key)
 		return
 	} else {
-		fmt.Printf("head failed: %#v\n", resp)
+		// fmt.Printf("head failed: %#v\n", resp)
 	}
 
 	var y bytes.Buffer
@@ -149,10 +149,12 @@ func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 		panic(err)
 	}
 
+	fmt.Printf("len(x): %d\n", x.Len())
+	fmt.Printf("cap(x): %d\n", x.Cap())
+
 	path = fmt.Sprintf("%sv1", path)
 	resp, err = http.Post(path, "appliation/octet-stream", &x)
 
-	fmt.Printf("%s\n", l)
 	if err != nil {
 		l.Status = "Failed"
 		l.Reason = fmt.Sprintf("Error contacting server: %s", err)
@@ -175,6 +177,10 @@ var (
 func getLogs(logfolder string) chan Log {
 	x := make(chan Log)
 
+	if debug != "" {
+		logfolder = "/Users/mcrane/Dropbox/Logs"
+	}
+
 	fmt.Printf("%s:\n", logfolder)
 	filenames := make([]string, 0)
 	for _, f := range []string{"Asset", "Bob", "Net", "Power", "LoadingScreen", "UpdateManager"} {
@@ -195,7 +201,7 @@ func getLogs(logfolder string) chan Log {
 
 	go func(filenames []string) {
 		send_log := func(log Log, x chan Log) {
-			fmt.Printf("Sending: %s\n", log)
+			// fmt.Printf("Sending: %s\n", log)
 			if log.p1.Hero == log.heros[0] {
 				log.p1.Hero = HeroClass[log.heros_cid[0]]
 				log.p2.Hero = HeroClass[log.heros_cid[1]]
@@ -278,17 +284,19 @@ func getLogs(logfolder string) chan Log {
 						log.data.WriteString(fmt.Sprintf("%s\n", l.Text))
 					}
 
+					// calc the times, and send it
 					log.Start = networkLine.Ts
 					log.Finish = line.Ts
 					log.Duration = log.Finish.Sub(log.Start)
+					send_log(log, x)
 
-					// reset tracking liens
+					// reset tracked lines, log status
 					subtypeLine.File = ""
 					gameTypeLine.File = ""
 					networkLine.File = ""
 					ranklevel.File = ""
-
-					send_log(log, x)
+					otherLines = make([]linejoin.FileAndLine, 0)
+					log = NewLog()
 				} else {
 					gameTypeLine = line
 					if subtypeLine.File == "" {
@@ -309,7 +317,6 @@ func getLogs(logfolder string) chan Log {
 					if l2 < l1 {
 						ranklevel = line
 					}
-					fmt.Printf("Debated of rank: %d or %d\n", l1, l2)
 				} else {
 					ranklevel = line
 				}
@@ -346,7 +353,6 @@ func getLogs(logfolder string) chan Log {
 				} else if hero.MatchString(line.Text) {
 					p := hero.NamedMatches(line.Text)
 					log.heros = append(log.heros, p["id"])
-					fmt.Println(line.Text)
 				} else if create.MatchString(line.Text) {
 					p := create.NamedMatches(line.Text)
 					if p["id"] == log.heros[0] {
@@ -400,7 +406,7 @@ func logServer(logFolder string) func(ws *websocket.Conn) {
 			}
 			if log.Uploader != "0" {
 				wg.Add(1)
-				go upload(log, ws, &wg)
+				upload(log, ws, &wg)
 			}
 			send(ws, log)
 		}
