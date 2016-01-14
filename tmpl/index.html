@@ -48,7 +48,7 @@ serversocket.onmessage = function(e) {
 
 		tr.append($('<td>').html(d.Playrs.local.Hero));
 		tr.append($('<td>').html('<span>' + d.Playrs.remote.Hero + '</span>&nbsp;<small class="text-muted">(' + d.Playrs.remote.Name + ')</span>'));
-		tr.append($('<td>').html(d.Type));
+		tr.append($('<td>').html(d.DisplayType));
 		tr.append($('<td>').html(moment(d.Start).format("ddd, MMMM Do, h:mm a")));
 		tr.append($('<td>').html(moment.duration(d.Duration / 1000000, 'milliseconds').humanize()));
 		if (d.Status === "Uploading") {
