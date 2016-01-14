@@ -91,7 +91,7 @@ type Log struct {
 }
 
 func (l Log) String() string {
-	return fmt.Sprintf("%s vs %s %s(%s) %s/%s", l.p1, l.p2, l.DisplayType, l.Type, l.Uploader, l.Key)
+	return fmt.Sprintf("%s vs %s %s(%s) %s/%s (%s->%s)", l.p1, l.p2, l.DisplayType, l.Type, l.Uploader, l.Key, l.Start, l.Finish)
 }
 
 func NewLog() Log {
@@ -230,18 +230,18 @@ func getLogs(logfolder string) chan Log {
 		var dbgout *os.File
 		var err error
 
-		var versionLine string
-		var gameTypeLine string
-		var subtypeLine string
-		var ranklevel string
-		var networkLine string
-		otherLines := make([]string, 0)
+		var versionLine linejoin.FileAndLine
+		var gameTypeLine linejoin.FileAndLine
+		var subtypeLine linejoin.FileAndLine
+		var ranklevel linejoin.FileAndLine
+		var networkLine linejoin.FileAndLine
+		otherLines := make([]linejoin.FileAndLine, 0)
 
 		log := NewLog()
 
 		for line := range linejoin.NewJoiner(filenames) {
 			if gameVersion.MatchString(line.Text) {
-				versionLine = line.Text
+				versionLine = line
 			} else if screenTransition.MatchString(line.Text) {
 				trans := screenTransition.NamedMatches(line.Text)
 
@@ -252,67 +252,71 @@ func getLogs(logfolder string) chan Log {
 						if err != nil {
 							panic(err)
 						}
-						fmt.Fprintf(dbgout, "%s\n", versionLine)
+						fmt.Fprintf(dbgout, "%s\n", versionLine.Text)
 						if log.Type == "RANKED" {
-							fmt.Fprintf(dbgout, "%s\n", subtypeLine)
+							fmt.Fprintf(dbgout, "%s\n", subtypeLine.Text)
 						} else {
-							fmt.Fprintf(dbgout, "%s\n", gameTypeLine)
+							fmt.Fprintf(dbgout, "%s\n", gameTypeLine.Text)
 						}
-						fmt.Fprintf(dbgout, "%s\n", networkLine)
-						fmt.Fprintf(dbgout, "%s\n", ranklevel)
+						fmt.Fprintf(dbgout, "%s\n", networkLine.Text)
+						fmt.Fprintf(dbgout, "%s\n", ranklevel.Text)
 						for _, l := range otherLines {
-							fmt.Fprintf(dbgout, "%s\n", l)
+							fmt.Fprintf(dbgout, "%s\n", l.Text)
 						}
 					}
 
 					// write to the log data
-					log.data.WriteString(fmt.Sprintf("%s\n", versionLine))
+					log.data.WriteString(fmt.Sprintf("%s\n", versionLine.Text))
 					if log.Type == "RANKED" {
-						log.data.WriteString(fmt.Sprintf("%s\n", subtypeLine))
+						log.data.WriteString(fmt.Sprintf("%s\n", subtypeLine.Text))
 					} else {
-						log.data.WriteString(fmt.Sprintf("%s\n", gameTypeLine))
+						log.data.WriteString(fmt.Sprintf("%s\n", gameTypeLine.Text))
 					}
-					log.data.WriteString(fmt.Sprintf("%s\n", networkLine))
-					log.data.WriteString(fmt.Sprintf("%s\n", ranklevel))
+					log.data.WriteString(fmt.Sprintf("%s\n", networkLine.Text))
+					log.data.WriteString(fmt.Sprintf("%s\n", ranklevel.Text))
 					for _, l := range otherLines {
-						log.data.WriteString(fmt.Sprintf("%s\n", l))
+						log.data.WriteString(fmt.Sprintf("%s\n", l.Text))
 					}
 
+					log.Start = networkLine.Ts
+					log.Finish = line.Ts
+					log.Duration = log.Finish.Sub(log.Start)
+
 					// reset tracking liens
-					subtypeLine = ""
-					gameTypeLine = ""
-					networkLine = ""
-					ranklevel = ""
+					subtypeLine.File = ""
+					gameTypeLine.File = ""
+					networkLine.File = ""
+					ranklevel.File = ""
 
 					send_log(log, x)
 				} else {
-					gameTypeLine = line.Text
-					if subtypeLine == "" {
+					gameTypeLine = line
+					if subtypeLine.File == "" {
 						log.Type = trans["curr"]
 					}
 				}
 			} else if strings.Contains(line.Text, typeLine) {
 				log.Type = "RANKED"
-				subtypeLine = line.Text
+				subtypeLine = line
 			} else if levelLine.MatchString(line.Text) {
 				// might be multiple medals for cross-rank play so get the smallest
 				// a game between 4/5 is really a game for level 4
-				if ranklevel != "" {
-					p1 := levelLine.NamedMatches(ranklevel)
+				if ranklevel.File != "" {
+					p1 := levelLine.NamedMatches(ranklevel.Text)
 					p2 := levelLine.NamedMatches(line.Text)
 					l1, _ := strconv.Atoi(p1["level"])
 					l2, _ := strconv.Atoi(p2["level"])
 					if l2 < l1 {
-						ranklevel = line.Text
+						ranklevel = line
 					}
 					fmt.Printf("Debated of rank: %d or %d\n", l1, l2)
 				} else {
-					ranklevel = line.Text
+					ranklevel = line
 				}
 			}
 
 			if strings.Contains(line.Text, "GameState") {
-				otherLines = append(otherLines, line.Text)
+				otherLines = append(otherLines, line)
 
 				if player.MatchString(line.Text) {
 					parts := player.NamedMatches(line.Text)
@@ -357,8 +361,6 @@ func getLogs(logfolder string) chan Log {
 					} else {
 						log.p2.Winner = true
 					}
-					log.Finish = line.Ts
-					log.Duration = log.Finish.Sub(log.Start)
 				} else if id.MatchString(line.Text) {
 					p := id.NamedMatches(line.Text)
 					if log.p1.Name == p["name"] {
@@ -378,7 +380,7 @@ func getLogs(logfolder string) chan Log {
 
 			if gameServer.MatchString(line.Text) {
 				gs := gameServer.NamedMatches(line.Text)
-				networkLine = line.Text
+				networkLine = line
 				log.Key = fmt.Sprintf("%s-%s", gs["game"], gs["key"])
 				log.Uploader = gs["client"]
 			}
