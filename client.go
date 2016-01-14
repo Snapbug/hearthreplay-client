@@ -177,10 +177,6 @@ var (
 func getLogs(logfolder string) chan Log {
 	x := make(chan Log)
 
-	if debug != "" {
-		logfolder = "/Users/mcrane/Dropbox/Logs"
-	}
-
 	fmt.Printf("%s:\n", logfolder)
 	filenames := make([]string, 0)
 	for _, f := range []string{"Asset", "Bob", "Net", "Power", "LoadingScreen", "UpdateManager"} {
