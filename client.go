@@ -244,6 +244,8 @@ func getLogs(logfolder string) chan Log {
 		for line := range linejoin.NewJoiner(filenames) {
 			if gameVersion.MatchString(line.Text) {
 				versionLine = line
+				p := gameVersion.NamedMatches(line.Text)
+				log.Version = p["version"]
 			} else if screenTransition.MatchString(line.Text) {
 				trans := screenTransition.NamedMatches(line.Text)
 
