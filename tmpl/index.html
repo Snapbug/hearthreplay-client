@@ -46,10 +46,12 @@ serversocket.onmessage = function(e) {
 			tr.attr('class', 'danger');
 		}
 
+		var s = moment(d.Start);
 		tr.append($('<td>').html(d.Playrs.local.Hero));
 		tr.append($('<td>').html('<span>' + d.Playrs.remote.Hero + '</span>&nbsp;<small class="text-muted">(' + d.Playrs.remote.Name + ')</span>'));
 		tr.append($('<td>').html(d.DisplayType));
-		tr.append($('<td>').html(moment(d.Start).format("ddd, MMMM Do, h:mm a")));
+		tr.append($('<td>').html(s.format("ddd, MMMM Do, h:mm a")));
+		tr.append($('<td><small class="text-muted">(' + s.fromNow() + ')</small>'));
 		tr.append($('<td>').html(moment.duration(d.Duration / 1000000, 'milliseconds').humanize()));
 		if (d.Status === "Uploading") {
 			tr.append($('<td>').attr('id', d.Key + '-status').html('<i class="fa fa-spinner fa-spin"></i>'));
@@ -89,12 +91,12 @@ serversocket.onclose = function(e) {
 			<table class="table table-hover">
 				<thead>
 					<tr>
-						<th>As</th>
-						<th>Against</th>
-						<th>Type</th>
-						<th>Start</th>
-						<th>Length</th>
-						<th>Status</th>
+						<th class="col-md-1">As</th>
+						<th class="col-md-2">Against</th>
+						<th class="col-md-1">Type</th>
+						<th colspan="2">Start</th>
+						<th class="col-md-1">Length</th>
+						<th class="col-md-2">Status</th>
 					</tr>
 				</thead>
 				<tbody id="games">
