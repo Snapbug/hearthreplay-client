@@ -298,7 +298,10 @@ func getLogs(logfolder string) chan Log {
 				} else {
 					gameTypeLine = line
 					if subtypeLine.File == "" {
-						log.Type = trans["curr"]
+						switch trans["curr"] {
+						case "ADVENTURE", "ARENA", "DRAFT", "FRIENDLY", "TAVERN_BRAWL", "TOURNAMENT", "RANKED":
+							log.Type = trans["curr"]
+						}
 					}
 				}
 			} else if strings.Contains(line.Text, typeLine) {
