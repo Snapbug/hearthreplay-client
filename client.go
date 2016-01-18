@@ -149,9 +149,6 @@ func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 		panic(err)
 	}
 
-	fmt.Printf("len(x): %d\n", x.Len())
-	fmt.Printf("cap(x): %d\n", x.Cap())
-
 	path = fmt.Sprintf("%sv1", path)
 	resp, err = http.Post(path, "appliation/octet-stream", &x)
 
