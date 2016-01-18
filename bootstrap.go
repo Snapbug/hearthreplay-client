@@ -315,7 +315,7 @@ var (
 
 	needed     = HSConfigSection{LogLevel: 1, FilePrinting: true, ConsolePrinting: false, ScreenPrinting: false}
 	hsConf     = make(map[string]HSConfigSection)
-	update_url = fmt.Sprintf("https://hearthreplay.com/v?os=%s&arch=%s", runtime.GOOS, runtime.GOARCH)
+	update_url = fmt.Sprintf("https://hearthreplay.com/version?os=%s&arch=%s", runtime.GOOS, runtime.GOARCH)
 )
 
 const (

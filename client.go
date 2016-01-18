@@ -114,7 +114,7 @@ func send(ws *websocket.Conn, l Log) {
 func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	path := fmt.Sprintf("%s/g/%s/%s/", upload_url, l.Uploader, l.Key)
+	path := fmt.Sprintf("%s/games/%s/%s/", upload_url, l.Uploader, l.Key)
 
 	resp, err := http.Head(path)
 
@@ -165,7 +165,7 @@ func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 		fmt.Printf("%s", b)
 	} else {
 		l.Status = "Success"
-		l.Reason = fmt.Sprintf("View at: %s/g/%s/%s/", upload_url, l.Uploader, l.Key)
+		l.Reason = fmt.Sprintf("View at: %s/games/%s/%s/", upload_url, l.Uploader, l.Key)
 	}
 	send(ws, l)
 }
