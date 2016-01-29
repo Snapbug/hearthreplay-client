@@ -1,21 +1,29 @@
 #!/bin/bash
 set -ef
 
+cd cmd/bootstrap
+
 env=windows
 for arch in amd64 386
 do
-	echo Building client for ${env} ${arch}
-	GOOS=${env} GOARCH=${arch} godep go build -o out/boot/hearthreplay-updater-${env}-${arch}.exe -ldflags "-s" bootstrap.go
+	out=hearthreplay-updater-${env}-${arch}.exe
+	echo Building ${out}
+	GOOS=${env} GOARCH=${arch} godep go build -o ${out}
+	mv ${out} ../../out/bootstrap/
 done
 
 env=darwin
 arch=amd64
-echo Building client for ${env} ${arch}
-GOOS=${env} GOARCH=${arch} godep go build -o "tmp/Hearthreplay Client.app/Contents/MacOS/hearthreplay-client-updater" -ldflags "-s" bootstrap.go
+out=hearthreplay-updater
+echo Building ${out}
+GOOS=${env} GOARCH=${arch} godep go build -o "../../tmp/Hearthreplay Client.app/Contents/MacOS/${out}"
+
+cd ../..
 
 # build a dmg for macos
 hdiutil create "Hearthreplay Client.dmg" -volname "Hearthreplay Client" -fs HFS+ -srcfolder "tmp/" -ov
 
-mv "Hearthreplay Client.dmg" out/boot
+mv "Hearthreplay Client.dmg" out/bootstrap/
 
-aws s3 sync out/boot/ s3://update.hearthreplay.com --acl public-read --exclude ".DS_Store"
+echo 'Sync to s3'
+aws s3 sync out/bootstrap/ s3://update.hearthreplay.com --acl public-read --exclude ".DS_Store"
