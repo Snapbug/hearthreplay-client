@@ -274,7 +274,7 @@ func checkLatest() bool {
 		fmt.Printf("%s is the latest version!\n", conf.Version)
 	} else {
 		fmt.Printf("Need to download new version: %s\n", m.Version)
-		url := fmt.Sprintf("https://s3-us-west-2.amazonaws.com/update.hearthreplay.com/hearthreplay-client-%s-%s-%s", runtime.GOOS, runtime.GOARCH, m.Version)
+		url := fmt.Sprintf("https://s3-us-west-2.amazonaws.com/update.hearthreplay.com/hearthreplay-client-%s-%s-%s", m.Version, runtime.GOOS, runtime.GOARCH)
 
 		resp, err = http.Get(url)
 
