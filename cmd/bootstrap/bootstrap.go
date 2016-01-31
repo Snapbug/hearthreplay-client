@@ -158,9 +158,11 @@ func checkHSConfig() (ok bool) {
 				hsConf[section] = needed
 				ok = false
 			} else {
-				if sec != needed {
+				if !sec.FilePrinting && sec.LogLevel != 1 {
 					fmt.Printf("%s section doesn't match expected -- being overwritten\n", section)
-					hsConf[section] = needed
+					sec.FilePrinting = true
+					sec.LogLevel = 1
+					hsConf[section] = sec
 					ok = false
 				} else {
 					fmt.Printf("%s section ok\n", section)
@@ -313,8 +315,8 @@ func checkLatest() bool {
 var (
 	conf Config
 
-	needed     = HSConfigSection{LogLevel: 1, FilePrinting: true, ConsolePrinting: false, ScreenPrinting: false}
 	hsConf     = make(map[string]HSConfigSection)
+	needed     = HSConfigSection{LogLevel: 1, FilePrinting: true, ConsolePrinting: false, ScreenPrinting: false}
 	update_url = fmt.Sprintf("https://hearthreplay.com/version?os=%s&arch=%s", runtime.GOOS, runtime.GOARCH)
 )
 

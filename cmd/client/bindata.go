@@ -84,7 +84,7 @@ func tmplChangelogHtml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "tmpl/changelog.html", size: 1747, mode: os.FileMode(420), modTime: time.Unix(1454034984, 0)}
+	info := bindataFileInfo{name: "tmpl/changelog.html", size: 1747, mode: os.FileMode(420), modTime: time.Unix(1454242289, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -104,7 +104,7 @@ func tmplIndexHtml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "tmpl/index.html", size: 3688, mode: os.FileMode(420), modTime: time.Unix(1454034984, 0)}
+	info := bindataFileInfo{name: "tmpl/index.html", size: 3688, mode: os.FileMode(420), modTime: time.Unix(1454242289, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
