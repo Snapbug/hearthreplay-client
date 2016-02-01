@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"encoding/gob"
@@ -127,7 +128,7 @@ func upload(l Log, ws *websocket.Conn, wg *sync.WaitGroup) {
 		fmt.Printf("Already uploaded %s/%s -- skipping\n", l.Uploader, l.Key)
 		return
 	} else {
-		// fmt.Printf("head failed: %#v\n", resp)
+		fmt.Printf("head failed: %#v\n", resp)
 	}
 
 	var y bytes.Buffer
@@ -194,7 +195,7 @@ func getLogs(logfolder string) chan Log {
 
 	go func(filenames []string) {
 		send_log := func(log Log, x chan Log) {
-			// fmt.Printf("Sending: %s\n", log)
+			fmt.Printf("Sending: %s\n", log)
 			if log.p1.Hero == log.heros[0] {
 				log.p1.Hero = HeroClass[log.heros_cid[0]]
 				log.p2.Hero = HeroClass[log.heros_cid[1]]
@@ -410,6 +411,10 @@ func logServer(logFolder string) func(ws *websocket.Conn) {
 		}
 		wg.Wait()
 		ws.Close()
+		if runtime.GOOS == "windows" {
+			reader := bufio.NewReader(os.Stdin)
+			_, _ = reader.ReadString('\n')
+		}
 		os.Exit(0)
 	}
 }
