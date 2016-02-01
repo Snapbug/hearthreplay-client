@@ -22,7 +22,7 @@ serversocket.onmessage = function(e) {
 			cl = "danger",
 			icon = "close",
 			content = d.Reason,
-			link = '<a href="https://hearthreplay.com/g/' + d.Uploader + '/' + d.Key + '/">view</a>';
+			link = '<a href="https://hearthreplay.com/games/' + d.Uploader + '/' + d.Key + '/">view</a>';
 		switch (d.Status) {
 			case "Success":
 				cl = "success";
@@ -61,7 +61,7 @@ serversocket.onmessage = function(e) {
 
 		$('#games').prepend(tr);
 		if ($('#user_header').children().length === 0 && d.Status === 'Uploading') {
-			$('#user_header').html('<a href="https://hearthreplay.com/g/' + d.Uploader + '/">View List of Your Games</a>');
+			$('#user_header').html('<a href="https://hearthreplay.com/games/' + d.Uploader + '/">View List of Your Games</a>');
 		}
 	}
 };
@@ -84,7 +84,7 @@ serversocket.onclose = function(e) {
 		<div class="container">
 			<div id="user_header" class="text-center">
 				{{ if .Player }}
-				<a href="https://hearthreplay.com/g/{{ .Player }}/">View List of Your Games</a>
+				<a href="https://hearthreplay.com/games/{{ .Player }}/">View List of Your Games</a>
 				{{ end }}
 			</div>
 			<h3>This Session: <span class="text-muted" id="progress">Uploading...</span></h3>
