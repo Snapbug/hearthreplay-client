@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"bitbucket.org/snapbug/hsr/client/location"
+	"bitbucket.org/snapbug/hearthreplay-client/location"
 
 	"github.com/cheggaaa/pb"
 	"github.com/inconshreveable/go-update"
@@ -62,11 +62,11 @@ func checkLocalConfig() bool {
 	header("Checking HSR client config")
 	cf, err := os.Open(local_conf)
 
-	suffix := ".app"
-	if runtime.GOOS == "windows" {
-		suffix = ".exe"
+	suffix := "exe"
+	if runtime.GOOS == "darwin" {
+		suffix = "app"
 	}
-	suffix = fmt.Sprintf("Hearthstone%s", suffix)
+	suffix = fmt.Sprintf("Hearthstone.%s", suffix)
 
 	if os.IsNotExist(err) {
 		fmt.Printf("Determining install location:\n")

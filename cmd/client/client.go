@@ -24,9 +24,9 @@ import (
 	"github.com/icub3d/graceful"
 	"github.com/kardianos/osext"
 
-	"bitbucket.org/snapbug/hsr/client/linejoin"
-	"bitbucket.org/snapbug/hsr/client/location"
-	"bitbucket.org/snapbug/hsr/common/regexp"
+	"bitbucket.org/snapbug/hearthreplay-client/linejoin"
+	"bitbucket.org/snapbug/hearthreplay-client/location"
+	"bitbucket.org/snapbug/hearthreplay-client/regexp"
 )
 
 var (
@@ -39,14 +39,14 @@ var (
 	gameServer       = regexp.New(`GotoGameServer -- address=(?P<ip>.+):(?P<port>\d+), game=(?P<game>\d+), client=(?P<client>\d+), spectateKey=(?P<key>.+)`)
 
 	// these are used to show the client something -- unvalidated by the server, but extracted from logs
-	player = regexp.New(`TAG_CHANGE Entity=(?P<name>.+) tag=PLAYSTATE value=PLAYING`)
-	first  = regexp.New(`TAG_CHANGE Entity=(?P<name>.+) tag=FIRST_PLAYER value=1`)
-	hent   = regexp.New(`TAG_CHANGE Entity=(?P<name>.+) tag=HERO_ENTITY value=(?P<hid>\d+)`)
-	winner = regexp.New(`TAG_CHANGE Entity=(?P<name>.+) tag=PLAYSTATE value=WON`)
-	id     = regexp.New(`TAG_CHANGE Entity=(?P<name>.+) tag=PLAYER_ID value=(?P<id>\d+)`)
-	hero   = regexp.New(`tag=HERO_ENTITY value=(?P<id>\d+)`)
-	create = regexp.New(` - FULL_ENTITY - Creating ID=(?P<id>\d+) CardID=(?P<cid>.*)`)
-	local  = regexp.New(`SendChoices\(\) - id=(?P<id>\d+) ChoiceType=MULLIGAN`)
+	player      = regexp.New(`TAG_CHANGE Entity=(?P<name>.+) tag=PLAYSTATE value=PLAYING`)
+	first       = regexp.New(`TAG_CHANGE Entity=(?P<name>.+) tag=FIRST_PLAYER value=1`)
+	hero_entity = regexp.New(`TAG_CHANGE Entity=(?P<name>.+) tag=HERO_ENTITY value=(?P<hid>\d+)`)
+	winner      = regexp.New(`TAG_CHANGE Entity=(?P<name>.+) tag=PLAYSTATE value=WON`)
+	id          = regexp.New(`TAG_CHANGE Entity=(?P<name>.+) tag=PLAYER_ID value=(?P<id>\d+)`)
+	hero        = regexp.New(`tag=HERO_ENTITY value=(?P<id>\d+)`)
+	create      = regexp.New(` - FULL_ENTITY - Creating ID=(?P<id>\d+) CardID=(?P<cid>.*)`)
+	local       = regexp.New(`SendChoices\(\) - id=(?P<id>\d+) ChoiceType=MULLIGAN`)
 )
 
 type Player struct {
@@ -216,6 +216,8 @@ func getLogs(logfolder string) chan Log {
 
 			if ty, ok := gameTypeMap[log.Type]; ok {
 				log.DisplayType = ty
+			} else {
+				log.DisplayType = log.Type
 			}
 
 			if log.Uploader == "0" {
@@ -296,9 +298,9 @@ func getLogs(logfolder string) chan Log {
 				} else {
 					gameTypeLine = line
 					if subtypeLine.File == "" {
-						switch trans["curr"] {
+						switch trans["prev"] {
 						case "ADVENTURE", "ARENA", "DRAFT", "FRIENDLY", "TAVERN_BRAWL", "TOURNAMENT", "RANKED":
-							log.Type = trans["curr"]
+							log.Type = trans["prev"]
 						}
 					}
 				}
@@ -338,8 +340,8 @@ func getLogs(logfolder string) chan Log {
 					} else {
 						log.p2.First = true
 					}
-				} else if hent.MatchString(line.Text) {
-					parts := hent.NamedMatches(line.Text)
+				} else if hero_entity.MatchString(line.Text) {
+					parts := hero_entity.NamedMatches(line.Text)
 					if log.p1.Name == parts["name"] {
 						if log.p1.Hero == "" {
 							log.p1.Hero = parts["hid"]
@@ -419,7 +421,7 @@ func logServer(logFolder string) func(ws *websocket.Conn) {
 	}
 }
 
-type PP struct {
+type TemplateOptions struct {
 	Port     string
 	Player   string
 	Version  string
@@ -427,34 +429,17 @@ type PP struct {
 	OS, Arch string
 }
 
-func make_tmpl_handler(tn string) func(w http.ResponseWriter, r *http.Request) {
-	return func(w http.ResponseWriter, r *http.Request) {
-		d, err := Asset(fmt.Sprintf("tmpl/%s.html", tn))
-		if err != nil {
-			panic(err)
-		}
-		t, err := template.New(tn).Parse(string(d))
-		if err != nil {
-			panic(err)
-		}
-		t.Execute(w, p)
-	}
-}
-
-var (
-	Version string
-	p       PP
-)
-
 type Config struct {
 	Install location.SetupLocation
 	Version string
 	Player  string
 }
 
-var conf Config
-
 var (
+	Version string
+	Options TemplateOptions
+	conf    Config
+
 	HeroClass = map[string]string{
 		"HERO_01":  "Warrior",
 		"HERO_01a": "Warrior",
@@ -483,9 +468,7 @@ var (
 		"HERO_08a": "Medivh",
 		"HERO_09":  "Anduin Wrynn",
 	}
-)
 
-var (
 	local_conf = "config.json"
 
 	gameTypeMap = map[string]string{
@@ -499,6 +482,20 @@ var (
 	}
 )
 
+func make_tmpl_handler(tn string) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		d, err := Asset(fmt.Sprintf("tmpl/%s.html", tn))
+		if err != nil {
+			panic(err)
+		}
+		t, err := template.New(tn).Parse(string(d))
+		if err != nil {
+			panic(err)
+		}
+		t.Execute(w, Options)
+	}
+}
+
 func main() {
 	root, err := osext.ExecutableFolder()
 	if err != nil {
@@ -509,7 +506,10 @@ func main() {
 	cf, err := os.Open(local_conf)
 
 	if err != nil {
-		panic(err)
+		cf, err = os.Create(local_conf)
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	err = json.NewDecoder(cf).Decode(&conf)
@@ -520,18 +520,18 @@ func main() {
 	if Version != "" && Version != conf.Version {
 		panic("Version mismatch")
 	}
-	p.Version = Version
-	p.Player = conf.Player
+	Options.Version = Version
+	Options.Player = conf.Player
 
 	if Version == "" {
-		p.Version = "testing"
+		Options.Version = "testing"
 	}
 
 	listener, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
 		panic(err)
 	}
-	_, p.Port, _ = net.SplitHostPort(listener.Addr().String())
+	_, Options.Port, _ = net.SplitHostPort(listener.Addr().String())
 
 	s := graceful.NewServer(&http.Server{
 		Addr:    listener.Addr().String(),
@@ -546,7 +546,7 @@ func main() {
 	go func() {
 		var err error
 		var cmd *exec.Cmd
-		url := fmt.Sprintf("http://localhost:%s/", p.Port)
+		url := fmt.Sprintf("http://localhost:%s/", Options.Port)
 		if runtime.GOOS == "darwin" {
 			cmd = exec.Command("open", url)
 		} else {
