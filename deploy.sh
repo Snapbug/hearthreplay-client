@@ -26,7 +26,7 @@ for arch in amd64 386
 do
 	out=${ROOT}-${SHA}-${env}-${arch}
 	echo Building ${out}
-	GOOS=${env} GOARCH=${arch} godep go build -o ${out} -ldflags "-X main.Version=${SHA} -X main.debug=${SHA}"
+	GOOS=${env} GOARCH=${arch} godep go build -o ${out} -ldflags "-X main.Version=${SHA}"
 	getchecksign ${out} ${SHA} ${env}-${arch}
 	mv ${out} ../../out/${SHA}/
 done
