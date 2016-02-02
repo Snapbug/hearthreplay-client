@@ -46,8 +46,16 @@ func (fl *FileAndLine) Update() bool {
 		// There was an issue with an NTP sync that caused a back shift
 		// of a few seconds so check that it's 11pm -> 12am
 		if fl.Ts.Before(old_time) && fl.Ts.Hour() == 0 && old_time.Hour() == 23 {
-			fl.base = fl.base.Add(time.Duration(24) * time.Hour)
-			fl.Ts = fl.Ts.Add(time.Duration(24) * time.Hour)
+			fl.base = fl.base.Add(24 * time.Hour)
+			fl.Ts = fl.Ts.Add(24 * time.Hour)
+		}
+
+		// if the timestamp is in the future, fix it
+		// this happens if the player moves over midnight:
+		// the modtime will be the next day, but hopefully they
+		// weren't playing 24 hours
+		for fl.Ts.After(time.Now()) {
+			fl.Ts = fl.Ts.Add(-24 * time.Hour)
 		}
 
 		return true
