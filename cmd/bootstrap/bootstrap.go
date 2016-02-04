@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"bitbucket.org/snapbug/hearthreplay-client/common"
 	"bitbucket.org/snapbug/hearthreplay-client/location"
 
 	"github.com/cheggaaa/pb"
@@ -27,40 +28,20 @@ import (
 	"github.com/sasbury/mini"
 )
 
-type Config struct {
-	Install location.SetupLocation
-	Version string
-	Player  string
-}
-
+// Helper, to print a header section
 func header(h string) {
 	fmt.Println("")
 	fmt.Println(h)
 	fmt.Println(strings.Repeat("-", len(h)))
 }
 
-func writeLocalConfig() bool {
-	cf, err := os.Create(local_conf)
-	if err != nil {
-		fmt.Printf("%#v", err)
-		return false
-	}
-	b, err := json.MarshalIndent(conf, "", "\t")
-	if err != nil {
-		fmt.Printf("%#v", err)
-		return false
-	}
-	fmt.Fprintf(cf, "%s", b)
-	if err = cf.Close(); err != nil {
-		fmt.Printf("%#v", err)
-		return false
-	}
-	return true
-}
-
+// Load the config, and get everything setup correctly
+//  - Determine install locations
+//  - Determine log locations
+//  - Check that the log configuration for HS is setup
 func checkLocalConfig() bool {
 	header("Checking HSR client config")
-	cf, err := os.Open(local_conf)
+	cf, err := os.Open(common.GetLocalConfigFile())
 
 	suffix := "exe"
 	if runtime.GOOS == "darwin" {
@@ -68,6 +49,8 @@ func checkLocalConfig() bool {
 	}
 	suffix = fmt.Sprintf("Hearthstone.%s", suffix)
 
+	// Here, the config file did not exist, so construct all the data
+	// that we need, and write it
 	if os.IsNotExist(err) {
 		fmt.Printf("Determining install location:\n")
 		if conf.Install, err = location.Location(); err != nil {
@@ -79,6 +62,7 @@ func checkLocalConfig() bool {
 				if !strings.HasSuffix(path, suffix) {
 					path = filepath.Join(path, suffix)
 				}
+				// Check that Hearthstone exists in the directory they specified
 				_, err = os.Stat(path)
 				if err != nil {
 					fmt.Printf("Invalid location, tried %s\n", filepath.Dir(path))
@@ -89,9 +73,9 @@ func checkLocalConfig() bool {
 				}
 			}
 		}
-		writeLocalConfig()
-
-		if cf, err = os.Open(local_conf); err != nil {
+		// write the config out, and reload it
+		common.WriteLocalConfig(conf)
+		if cf, err = os.Open(common.GetLocalConfigFile()); err != nil {
 			fmt.Printf("%#v", err)
 			return false
 		}
@@ -103,16 +87,19 @@ func checkLocalConfig() bool {
 	}
 	defer cf.Close()
 
+	// Attempt to load the config
 	if err = json.NewDecoder(cf).Decode(&conf); err != nil {
 		fmt.Printf("%#v", err)
 		return false
 	}
 
+	// Debug/useful information -- so if it's wrong they can change it
 	fmt.Printf("\tLog folder: %#s\n", conf.Install.LogFolder)
 	fmt.Printf("\tHS log config: %#s\n", conf.Install.Config)
 	return true
 }
 
+// A hearthstone log configuration option looks like this
 type HSConfigSection struct {
 	LogLevel        int64
 	FilePrinting    bool
@@ -120,14 +107,21 @@ type HSConfigSection struct {
 	ScreenPrinting  bool
 }
 
+// For debugging, and writing a configuration section to file
 func (h HSConfigSection) String() string {
-	return fmt.Sprintf("LogLevel=%d\nFilePrinting=%v\nConsolePrinting=%v\nScreenPrinting=%v\n", h.LogLevel, h.FilePrinting, h.ConsolePrinting, h.ScreenPrinting)
+	return fmt.Sprintf(`LogLevel=%d
+	FilePrinting=%v
+	ConsolePrinting=%v
+	ScreenPrinting=%v`,
+		h.LogLevel,
+		h.FilePrinting,
+		h.ConsolePrinting,
+		h.ScreenPrinting,
+	)
 }
 
-var (
-	conf_sections = []string{"Asset", "Bob", "Net", "Power", "LoadingScreen", "UpdateManager"}
-)
-
+// Check that the logs for hearthstone are setup correctly -- that log.config exists
+// and is logging the files that we want to parse
 func checkHSConfig() (ok bool) {
 	header("Setting up HS logging")
 	ok = true
@@ -135,7 +129,7 @@ func checkHSConfig() (ok bool) {
 	hslog, err := os.Open(conf.Install.Config)
 	if os.IsNotExist(err) {
 		fmt.Printf("HS log configuration did not exist, creating.\n")
-		for _, section := range conf_sections {
+		for _, section := range common.LogFiles {
 			hsConf[section] = needed
 		}
 		ok = false
@@ -143,22 +137,29 @@ func checkHSConfig() (ok bool) {
 		fmt.Printf("%#v", err)
 		return false
 	} else {
+		// Ok, so some logging has been setup before
+
+		// load the previously configured sections
 		cf, _ := mini.LoadConfigurationFromReader(hslog)
 		for _, section := range cf.SectionNames() {
 			sec := HSConfigSection{}
-			_ = cf.DataFromSection(section, &sec)
+			cf.DataFromSection(section, &sec)
 			hsConf[section] = sec
 		}
 
-		for _, section := range conf_sections {
+		// now set the bits we want
+		for _, section := range common.LogFiles {
 			sec := HSConfigSection{}
 			k := cf.DataFromSection(section, &sec)
+			// the bit we wanted isn't here
 			if !k {
 				fmt.Printf("%s section missing\n", section)
 				hsConf[section] = needed
 				ok = false
 			} else {
+				// it's here, make sure that FilePrinting and LogLevel are set
 				if !sec.FilePrinting && sec.LogLevel != 1 {
+					// warn the user we're changing the config, so they can check it
 					fmt.Printf("%s section doesn't match expected -- being overwritten\n", section)
 					sec.FilePrinting = true
 					sec.LogLevel = 1
@@ -172,16 +173,19 @@ func checkHSConfig() (ok bool) {
 		hslog.Close()
 	}
 
+	// For niceness, sort the config file sections
 	sections := make([]string, 0, len(hsConf))
 	for k := range hsConf {
 		sections = append(sections, k)
 	}
 	sort.Strings(sections)
 
+	// Because we read it all, or constructed it, we can nuke the old logging config here
 	if hslog, err = os.Create(conf.Install.Config); err != nil {
 		fmt.Printf("%#v", err)
 		return false
 	}
+	// print out the sections in sorted order, :)
 	for _, k := range sections {
 		fmt.Fprintf(hslog, "[%s]\n%s\n", k, hsConf[k])
 	}
@@ -189,12 +193,14 @@ func checkHSConfig() (ok bool) {
 	return
 }
 
+// What the server tells us about the version of the client that is current
 type VersionUpdate struct {
 	Version   string `json:"version"`
 	Checksum  string `json:"checksum"`
 	Signature string `json:"signature"`
 }
 
+// Perform a verified (signed/checksum) update for the client program
 func verifiedUpdate(binary io.Reader, givenUpdate VersionUpdate) (err error) {
 	f, err := os.Open(client_prog)
 	if err != nil {
@@ -209,6 +215,8 @@ func verifiedUpdate(binary io.Reader, givenUpdate VersionUpdate) (err error) {
 			return err
 		}
 	}
+	// On macos we have to set the executable bit, on windows it's enough
+	// to call the program .exe
 	if runtime.GOOS == "darwin" {
 		stat, err := f.Stat()
 		if err != nil {
@@ -243,6 +251,7 @@ func verifiedUpdate(binary io.Reader, givenUpdate VersionUpdate) (err error) {
 	if err != nil {
 		return
 	}
+	// do the update!
 	err = update.Apply(binary, opts)
 	if err != nil {
 		return
@@ -250,6 +259,8 @@ func verifiedUpdate(binary io.Reader, givenUpdate VersionUpdate) (err error) {
 	return
 }
 
+// The last check the bootstrapper does is check that the version of the client that's
+// installed is the latest one
 func checkLatest() bool {
 	var m VersionUpdate
 	header("Checking version of client")
@@ -290,7 +301,7 @@ func checkLatest() bool {
 
 		i, _ := strconv.Atoi(resp.Header.Get("Content-Length"))
 
-		bar := pb.New(i).SetUnits(pb.U_BYTES).SetRefreshRate(time.Millisecond * 10)
+		bar := pb.New(i).SetUnits(pb.U_BYTES).SetRefreshRate(time.Millisecond * 100)
 		bar.ShowSpeed = true
 		bar.Start()
 
@@ -304,8 +315,9 @@ func checkLatest() bool {
 		}
 		bar.Finish()
 
+		// if we've updated successfully, update the configuration file to reflect that
 		conf.Version = m.Version
-		if ok := writeLocalConfig(); !ok {
+		if ok := common.WriteLocalConfig(conf); !ok {
 			return false
 		}
 	}
@@ -313,13 +325,14 @@ func checkLatest() bool {
 }
 
 var (
-	conf Config
+	conf common.Config
 
 	hsConf     = make(map[string]HSConfigSection)
 	needed     = HSConfigSection{LogLevel: 1, FilePrinting: true, ConsolePrinting: false, ScreenPrinting: false}
 	update_url = fmt.Sprintf("https://hearthreplay.com/version?os=%s&arch=%s", runtime.GOOS, runtime.GOARCH)
 )
 
+// Used to check the signature of the executable
 const (
 	publicKey = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnFz67+ql0kCILF3Ns/Ua
@@ -334,21 +347,27 @@ fQIDAQAB
 
 var (
 	client_prog = "hearthreplay-client"
-	local_conf  = "config.json"
 )
 
+// Does three things:
+// - checks the local config is setup
+// - checks that hearthstone configuration is setup
+// - checks that the version of the client is the latest
+//
+// After that, it launches the client!
 func main() {
 	folder, err := osext.ExecutableFolder()
 	if err != nil {
-		fmt.Printf("%#v", err)
-		return
+		panic(err)
 	}
+
+	// the macos version does some weirdness because it's launched
+	// from an apple script -- we get the path with '' around it
 	client_prog = strings.Trim(client_prog, "'")
 	client_prog = filepath.Join(folder, client_prog)
 	if runtime.GOOS == "windows" {
 		client_prog = fmt.Sprintf("%s.exe", client_prog)
 	}
-	local_conf = filepath.Join(folder, local_conf)
 
 	fmt.Println("==================================")
 	fmt.Println("Hearthstone Replay Client Launcher")
@@ -356,6 +375,9 @@ func main() {
 
 	ok := checkLocalConfig() && checkHSConfig() && checkLatest()
 
+	// Something went wrong -- so generic error message (arguably
+	// it'd be better to say _what_ but that should come from
+	// within those methods)
 	if !ok {
 		fmt.Println()
 		fmt.Println("==================================")
@@ -364,13 +386,14 @@ func main() {
 		fmt.Println("==================================")
 		fmt.Println()
 	} else {
+		// launch the client!
 		if err := exec.Command(client_prog).Start(); err != nil {
 			fmt.Println(err)
 		}
 	}
 
-	if runtime.GOOS == "windows" {
-		reader := bufio.NewReader(os.Stdin)
-		_, _ = reader.ReadString('\n')
-	}
+	// don't quit out immediately -- let the user see whatever errors there may be
+	fmt.Println("Press any key to quit.")
+	reader := bufio.NewReader(os.Stdin)
+	_, _ = reader.ReadString('\n')
 }

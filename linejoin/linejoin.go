@@ -92,7 +92,11 @@ func NewJoiner(filenames []string) chan FileAndLine {
 
 		for logsandlines.Len() > 0 {
 			sort.Sort(logsandlines)
-			x <- FileAndLine{Ts: logsandlines[0].Ts, Text: logsandlines[0].Text, File: filepath.Base(logsandlines[0].File)}
+			x <- FileAndLine{
+				Ts:   logsandlines[0].Ts,
+				Text: logsandlines[0].Text,
+				File: filepath.Base(logsandlines[0].File),
+			}
 			if !logsandlines[0].Update() {
 				logsandlines = logsandlines[1:]
 			}
