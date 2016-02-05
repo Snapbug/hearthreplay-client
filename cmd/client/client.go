@@ -77,7 +77,7 @@ type Log struct {
 	Uploader    string
 	Key         string
 	Data        []byte `json:"-"`
-	Players     map[string]Player
+	Playrs      map[string]Player
 
 	// The status of the upload
 	Status string
@@ -102,8 +102,8 @@ func (l Log) String() string {
 // By default logs have an uploading status -- this gets updated in code
 func NewLog() Log {
 	return Log{
-		Status:  "Uploading",
-		Players: make(map[string]Player),
+		Status: "Uploading",
+		Playrs: make(map[string]Player),
 	}
 }
 
@@ -226,11 +226,11 @@ func getLogs(logfolder string) chan Log {
 			}
 
 			if log.local == "1" {
-				log.Players["local"] = log.p1
-				log.Players["remote"] = log.p2
+				log.Playrs["local"] = log.p1
+				log.Playrs["remote"] = log.p2
 			} else {
-				log.Players["local"] = log.p2
-				log.Players["remote"] = log.p1
+				log.Playrs["local"] = log.p2
+				log.Playrs["remote"] = log.p1
 			}
 
 			if ty, ok := gameTypeMap[log.Type]; ok {
